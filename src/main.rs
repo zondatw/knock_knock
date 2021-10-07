@@ -22,6 +22,11 @@ fn main() -> Result<()> {
     println!("{:?}", stream.peer_addr().unwrap());
     stream.write(&[1]).expect("Couldn't send data to server...");
     stream.read(&mut buffer).expect("Couldn't recv data from server...");
+    println!("=== Raw ===");
     println!("{:?}", buffer);
+
+    let str_buffer = String::from_utf8_lossy(&buffer);
+    println!("=== Str ===");
+    println!("{}", str_buffer);
     Ok(())
 }

@@ -1,7 +1,7 @@
 use std::io::prelude::*;
 use std::io::Result;
 use std::net::{TcpStream, ToSocketAddrs, SocketAddr};
-use std::error::Error;
+use clap::{App, load_yaml};
 
 fn resolve(domain: &str) -> Vec<SocketAddr> {
    domain.to_socket_addrs()
@@ -10,13 +10,16 @@ fn resolve(domain: &str) -> Vec<SocketAddr> {
 }
 
 fn main() -> Result<()> {
-    let target = "google.com:80";
+    let yaml = load_yaml!("cli.yaml");
+    let args = App::from(yaml).get_matches();
+
+    let target = args.value_of("Domain").unwrap();
 
     let server = resolve(target);
-    println!("{:?}", server);
+    println!("Server: {:?}", server);
 
     let mut stream = TcpStream::connect(target)
-                                .expect("Couldn't connect to the server..");
+                                .expect("Couldn't connect to the server...");
     let mut buffer = [0; 1024];
 
     println!("{:?}", stream.peer_addr().unwrap());

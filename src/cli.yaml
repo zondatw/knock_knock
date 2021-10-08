@@ -1,0 +1,13 @@
+name: Knock Knock 
+version: "1.0"
+author: Zonda Yang <u226699@gmail.com>
+about: Ping protocol
+args:
+    - Domain:
+        about: Set domain which you want to check exist
+        required: true
+        index: 1
+    - verbose:
+        short: v
+        multiple_occurrences: true
+        about: Sets the level of verbosity

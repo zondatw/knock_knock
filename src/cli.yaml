@@ -7,6 +7,10 @@ args:
         about: Set domain which you want to check exist
         required: true
         index: 1
+    - Count:
+        short: c
+        about: ping times
+        default_value: "3"
     - verbose:
         short: v
         multiple_occurrences: true

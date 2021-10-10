@@ -15,11 +15,12 @@ fn main() -> Result<()> {
     let args = App::from(yaml).get_matches();
 
     let target = args.value_of("Domain").unwrap();
+    let count = args.value_of("Count")
+        .and_then(|s| s.parse::<u64>().ok())
+        .unwrap();
 
     let server = resolve(target);
     println!("Server: {:?}", server);
-
-    let count = 3;
 
     let mut total_time = Duration::new(0, 0);
     let lose_count = 0;

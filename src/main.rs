@@ -3,6 +3,7 @@ use std::io::Result;
 use std::net::{TcpStream, ToSocketAddrs, SocketAddr};
 use std::time::{Duration, Instant};
 use clap::{App, load_yaml};
+use colored::*;
 
 fn resolve(domain: &str) -> Vec<SocketAddr> {
    domain.to_socket_addrs()
@@ -11,13 +12,14 @@ fn resolve(domain: &str) -> Vec<SocketAddr> {
 }
 
 fn display_ping_info(target: SocketAddr, elapsed_time: Duration) {
-    println!("{:?}: time={:?}",
-            target,
-            elapsed_time);
+    let console_str = format!("{:?}: time={:>10} ms",
+                                target,
+                                format!("{:.5}", elapsed_time.as_secs_f64() * 1000.0));
+    println!("{}", console_str.green());
 }
 
 fn display_statistic(total_time: Duration, count: u64, lose_count: u64) {
-    println!("----- statistic -----");
+    println!("{}", "----- statistic -----".bold());
     println!("total time: {:?}", total_time);
     println!("Connect time: {}, recv time: {}, lose time: {} ({}%)",
             count,
@@ -39,7 +41,7 @@ fn main() -> Result<()> {
 
     // DNS resolve
     let server = resolve(target);
-    println!("Server: {:?}", server);
+    println!("DNS lookup: {:?}", server);
 
     // ping
     let mut total_time = Duration::new(0, 0);

@@ -10,6 +10,12 @@ fn resolve(domain: &str) -> Vec<SocketAddr> {
        .collect()
 }
 
+fn display_ping_info(target: SocketAddr, elapsed_time: Duration) {
+    println!("{:?}: time={:?}",
+            target,
+            elapsed_time);
+}
+
 fn display_statistic(total_time: Duration, count: u64, lose_count: u64) {
     println!("----- statistic -----");
     println!("total time: {:?}", total_time);
@@ -46,10 +52,13 @@ fn main() -> Result<()> {
 
         stream.write(&[1]).expect("Couldn't send data to server...");
         stream.read(&mut buffer).expect("Couldn't recv data from server...");
+
         let elapsed_time = start_time.elapsed();
-        println!("{:?}: time={:?}",
-                stream.peer_addr().unwrap(),
-                elapsed_time);
+
+        display_ping_info(
+            stream.peer_addr().unwrap(),
+            elapsed_time);
+
         total_time += elapsed_time;
     }
 

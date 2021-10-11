@@ -10,6 +10,16 @@ fn resolve(domain: &str) -> Vec<SocketAddr> {
        .collect()
 }
 
+fn display_statistic(total_time: Duration, count: u64, lose_count: u64) {
+    println!("----- statistic -----");
+    println!("total time: {:?}", total_time);
+    println!("Connect time: {}, recv time: {}, lose time: {} ({}%)",
+            count,
+            count - lose_count,
+            lose_count,
+            if lose_count == 0 { 0 } else { lose_count * 100 / count });
+}
+
 fn main() -> Result<()> {
     let yaml = load_yaml!("cli.yaml");
     let args = App::from(yaml).get_matches();
@@ -23,7 +33,7 @@ fn main() -> Result<()> {
     println!("Server: {:?}", server);
 
     let mut total_time = Duration::new(0, 0);
-    let lose_count = 0;
+    let lose_count: u64 = 0;
     for _ in 0..count {
         let start_time = Instant::now();
         let mut stream = TcpStream::connect(target)
@@ -37,20 +47,7 @@ fn main() -> Result<()> {
                 stream.peer_addr().unwrap(),
                 elapsed_time);
         total_time += elapsed_time;
-        //println!("=== Raw ===");
-        //println!("{:?}", buffer);
-
-        //let str_buffer = String::from_utf8_lossy(&buffer);
-        //println!("=== Str ===");
-        //println!("{}", str_buffer);
     }
-
-    println!("----- statistic -----");
-    println!("total time: {:?}", total_time);
-    println!("Connect time: {}, recv time: {}, lose time: {} ({}%)",
-            count,
-            count - lose_count,
-            lose_count,
-            if lose_count == 0 { 0 } else { lose_count * 100 / count });
+    display_statistic(total_time, count ,lose_count);
     Ok(())
 }

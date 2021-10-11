@@ -28,6 +28,23 @@ fn display_statistic(total_time: Duration, count: u64, lose_count: u64) {
             if lose_count == 0 { 0 } else { lose_count * 100 / count });
 }
 
+fn tcping(target: &str) -> Duration {
+    let start_time = Instant::now();
+    let mut stream = TcpStream::connect(target)
+                                .expect("Couldn't connect to the server...");
+    let mut buffer = [0; 1024];
+
+    stream.write(&[1]).expect("Couldn't send data to server...");
+    stream.read(&mut buffer).expect("Couldn't recv data from server...");
+
+    let elapsed_time = start_time.elapsed();
+
+    display_ping_info(
+        stream.peer_addr().unwrap(),
+        elapsed_time);
+    elapsed_time
+}
+
 fn main() -> Result<()> {
     // load cli config
     let yaml = load_yaml!("cli.yaml");
@@ -47,21 +64,7 @@ fn main() -> Result<()> {
     let mut total_time = Duration::new(0, 0);
     let lose_count: u64 = 0;
     for _ in 0..count {
-        let start_time = Instant::now();
-        let mut stream = TcpStream::connect(target)
-                                    .expect("Couldn't connect to the server...");
-        let mut buffer = [0; 1024];
-
-        stream.write(&[1]).expect("Couldn't send data to server...");
-        stream.read(&mut buffer).expect("Couldn't recv data from server...");
-
-        let elapsed_time = start_time.elapsed();
-
-        display_ping_info(
-            stream.peer_addr().unwrap(),
-            elapsed_time);
-
-        total_time += elapsed_time;
+        total_time += tcping(target);
     }
 
     // statistic

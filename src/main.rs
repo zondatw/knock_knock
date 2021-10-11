@@ -21,17 +21,21 @@ fn display_statistic(total_time: Duration, count: u64, lose_count: u64) {
 }
 
 fn main() -> Result<()> {
+    // load cli config
     let yaml = load_yaml!("cli.yaml");
     let args = App::from(yaml).get_matches();
 
+    // parse args
     let target = args.value_of("Domain").unwrap();
     let count = args.value_of("Count")
         .and_then(|s| s.parse::<u64>().ok())
         .unwrap();
 
+    // DNS resolve
     let server = resolve(target);
     println!("Server: {:?}", server);
 
+    // ping
     let mut total_time = Duration::new(0, 0);
     let lose_count: u64 = 0;
     for _ in 0..count {
@@ -48,6 +52,8 @@ fn main() -> Result<()> {
                 elapsed_time);
         total_time += elapsed_time;
     }
+
+    // statistic
     display_statistic(total_time, count ,lose_count);
     Ok(())
 }

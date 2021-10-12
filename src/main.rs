@@ -11,11 +11,16 @@ fn resolve(domain: &str) -> Vec<SocketAddr> {
        .collect()
 }
 
-fn display_ping_info(target: SocketAddr, elapsed_time: Duration) {
-    let console_str = format!("{:?}: time={:>10} ms",
+fn display_ping_info(target: &str, elapsed_time: Duration) {
+    let console_str = format!("{}: time={:>10} ms",
                                 target,
                                 format!("{:.5}", elapsed_time.as_secs_f64() * 1000.0));
     println!("{}", console_str.green());
+}
+
+fn display_ping_fail(target: &str) {
+    let console_str = format!("{}: fail", target);
+    println!("{}", console_str.red());
 }
 
 fn display_statistic(total_time: Duration, count: u64, lose_count: u64) {
@@ -28,21 +33,20 @@ fn display_statistic(total_time: Duration, count: u64, lose_count: u64) {
             if lose_count == 0 { 0 } else { lose_count * 100 / count });
 }
 
-fn tcping(target: &str) -> Duration {
+fn tcping(target: &str) -> Result<Duration> {
     let start_time = Instant::now();
-    let mut stream = TcpStream::connect(target)
-                                .expect("Couldn't connect to the server...");
+    let mut stream = TcpStream::connect(target)?;
     let mut buffer = [0; 1024];
 
-    stream.write(&[1]).expect("Couldn't send data to server...");
-    stream.read(&mut buffer).expect("Couldn't recv data from server...");
+    stream.write(&[1])?;
+    stream.read(&mut buffer)?;
 
     let elapsed_time = start_time.elapsed();
 
     display_ping_info(
-        stream.peer_addr().unwrap(),
+        target,
         elapsed_time);
-    elapsed_time
+    Ok(elapsed_time)
 }
 
 fn main() -> Result<()> {
@@ -62,12 +66,18 @@ fn main() -> Result<()> {
 
     // ping
     let mut total_time = Duration::new(0, 0);
-    let lose_count: u64 = 0;
+    let mut lose_count: u64 = 0;
     for _ in 0..count {
-        total_time += tcping(target);
+        match tcping(target) {
+            Ok(elapsed_time) => total_time += elapsed_time,
+            Err(_) => {
+                lose_count += 1;
+                display_ping_fail(target)
+            },
+        };
     }
 
     // statistic
-    display_statistic(total_time, count ,lose_count);
+    display_statistic(total_time, count, lose_count);
     Ok(())
 }

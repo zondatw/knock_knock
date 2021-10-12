@@ -23,8 +23,7 @@ fn display_ping_fail(target: &str) {
     println!("{}", console_str.red());
 }
 
-fn display_statistic(total_time: Duration, count: u64, lose_count: u64) {
-    let recv_count = count - lose_count;
+fn display_statistic(total_time: Duration, count: u64, recv_count: u64, lose_count: u64) {
     println!("{}", "----- statistic -----".bold());
     println!("total time: {:?}", total_time);
     println!("Connect time: {}, recv time: {} ({}%), lose time: {} ({}%)",
@@ -80,6 +79,6 @@ fn main() -> Result<()> {
     }
 
     // statistic
-    display_statistic(total_time, count, lose_count);
+    display_statistic(total_time, count, count - lose_count, lose_count);
     Ok(())
 }

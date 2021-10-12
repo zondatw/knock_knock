@@ -24,11 +24,13 @@ fn display_ping_fail(target: &str) {
 }
 
 fn display_statistic(total_time: Duration, count: u64, lose_count: u64) {
+    let recv_count = count - lose_count;
     println!("{}", "----- statistic -----".bold());
     println!("total time: {:?}", total_time);
-    println!("Connect time: {}, recv time: {}, lose time: {} ({}%)",
+    println!("Connect time: {}, recv time: {} ({}%), lose time: {} ({}%)",
             count,
-            count - lose_count,
+            recv_count,
+            if recv_count == 0 { 0 } else { recv_count * 100 / count },
             lose_count,
             if lose_count == 0 { 0 } else { lose_count * 100 / count });
 }

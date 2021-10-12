@@ -13,6 +13,8 @@ $ cargo build --release
 
 ## Execution
 
+### Ping TCP path
+
 ```shell
 $ knock_knock localhost:8000 -c 3
 DNS lookup: [[::1]:8000, 127.0.0.1:8000]

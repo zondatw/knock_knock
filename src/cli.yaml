@@ -11,6 +11,10 @@ args:
         short: c
         about: ping times
         default_value: "3"
+    - Protocol:
+        short: p
+        about: Which protocol you want to ping
+        default_value: "TCP"
     - verbose:
         short: v
         multiple_occurrences: true

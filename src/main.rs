@@ -2,8 +2,25 @@ use std::io::prelude::*;
 use std::io::Result;
 use std::net::{TcpStream, ToSocketAddrs, SocketAddr};
 use std::time::{Duration, Instant};
+use std::collections::HashMap;
 use clap::{App, load_yaml};
 use colored::*;
+
+type Pinger = fn(&str) -> Result<Duration>;
+
+struct PingHandler {
+    protocol_map: HashMap<String, Pinger>,
+}
+
+impl PingHandler {
+    fn add_pinger(&mut self, protocol: String, func: Pinger) {
+        self.protocol_map.insert(protocol, func);
+    }
+
+    fn ping(&mut self, protocol: &str, arg: &str) -> Result<Duration> {
+        self.protocol_map[protocol](arg)
+    }
+}
 
 fn resolve(domain: &str) -> Vec<SocketAddr> {
    domain.to_socket_addrs()
@@ -51,12 +68,17 @@ fn tcping(target: &str) -> Result<Duration> {
 }
 
 fn main() -> Result<()> {
+    // init function map
+    let mut ping_handler = PingHandler { protocol_map: HashMap::new() };
+    ping_handler.add_pinger(String::from("TCP"), tcping);
+
     // load cli config
     let yaml = load_yaml!("cli.yaml");
     let args = App::from(yaml).get_matches();
 
     // parse args
     let target = args.value_of("Domain").unwrap();
+    let protocol = args.value_of("Protocol").unwrap();
     let count = args.value_of("Count")
         .and_then(|s| s.parse::<u64>().ok())
         .unwrap();
@@ -69,7 +91,7 @@ fn main() -> Result<()> {
     let mut total_time = Duration::new(0, 0);
     let mut lose_count: u64 = 0;
     for _ in 0..count {
-        match tcping(target) {
+        match ping_handler.ping(protocol, target) {
             Ok(elapsed_time) => total_time += elapsed_time,
             Err(_) => {
                 lose_count += 1;

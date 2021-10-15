@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use clap::{App, load_yaml};
 use colored::*;
 
-type Pinger = fn(&str) -> Result<Duration>;
+type Pinger = fn(&str) -> Result<()>;
 
 struct PingHandler {
     protocol_map: HashMap<String, Pinger>,
@@ -17,9 +17,22 @@ impl PingHandler {
         self.protocol_map.insert(protocol, func);
     }
 
-    fn ping(&mut self, protocol: &str, arg: &str) -> Result<Duration> {
-        self.protocol_map[protocol](arg)
+    fn ping(&mut self, protocol: &str, target: &str) -> Result<Duration> {
+        let start_time = Instant::now();
+
+        match self.protocol_map[protocol](target) {
+            Ok(_) => (),
+            Err(err) => return Err(err),
+        };
+
+        let elapsed_time = start_time.elapsed();
+
+        display_ping_info(
+            target,
+            elapsed_time);
+        Ok(elapsed_time)
     }
+
 }
 
 fn resolve(domain: &str) -> Vec<SocketAddr> {
@@ -51,20 +64,13 @@ fn display_statistic(total_time: Duration, count: u64, recv_count: u64, lose_cou
             if lose_count == 0 { 0 } else { lose_count * 100 / count });
 }
 
-fn tcping(target: &str) -> Result<Duration> {
-    let start_time = Instant::now();
+fn tcping(target: &str) -> Result<()> {
     let mut stream = TcpStream::connect(target)?;
     let mut buffer = [0; 1024];
 
     stream.write(&[1])?;
     stream.read(&mut buffer)?;
-
-    let elapsed_time = start_time.elapsed();
-
-    display_ping_info(
-        target,
-        elapsed_time);
-    Ok(elapsed_time)
+    Ok(())
 }
 
 fn main() -> Result<()> {

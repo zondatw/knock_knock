@@ -26,10 +26,6 @@ impl PingHandler {
         };
 
         let elapsed_time = start_time.elapsed();
-
-        display_ping_info(
-            target,
-            elapsed_time);
         Ok(elapsed_time)
     }
 
@@ -98,7 +94,12 @@ fn main() -> Result<()> {
     let mut lose_count: u64 = 0;
     for _ in 0..count {
         match ping_handler.ping(protocol, target) {
-            Ok(elapsed_time) => total_time += elapsed_time,
+            Ok(elapsed_time) => {
+                display_ping_info(
+                    target,
+                    elapsed_time);
+                total_time += elapsed_time;
+            },
             Err(_) => {
                 lose_count += 1;
                 display_ping_fail(target)

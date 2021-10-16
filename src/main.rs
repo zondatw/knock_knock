@@ -1,6 +1,6 @@
 use std::io::prelude::*;
 use std::io::Result;
-use std::net::{TcpStream, ToSocketAddrs, SocketAddr};
+use std::net::{TcpStream, UdpSocket, ToSocketAddrs, SocketAddr};
 use std::time::{Duration, Instant};
 use std::collections::HashMap;
 use clap::{App, load_yaml};
@@ -69,10 +69,23 @@ fn tcping(target: &str) -> Result<()> {
     Ok(())
 }
 
+fn udping(target: &str) -> Result<()> {
+    let socket = UdpSocket::bind("127.0.0.1:0")?;
+    socket.connect(target)?;
+    socket.set_read_timeout(Some(Duration::new(5, 0)))?;
+    socket.set_write_timeout(Some(Duration::new(5, 0)))?;
+    let mut buffer = [0; 1024];
+
+    socket.send(&[1])?;
+    socket.recv_from(&mut buffer)?;
+    Ok(())
+}
+
 fn main() -> Result<()> {
     // init function map
     let mut ping_handler = PingHandler { protocol_map: HashMap::new() };
     ping_handler.add_pinger(String::from("TCP"), tcping);
+    ping_handler.add_pinger(String::from("UDP"), udping);
 
     // load cli config
     let yaml = load_yaml!("cli.yaml");

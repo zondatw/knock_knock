@@ -1,35 +1,10 @@
-use std::io::prelude::*;
 use std::io::Result;
-use std::net::{TcpStream, UdpSocket, ToSocketAddrs, SocketAddr};
-use std::time::{Duration, Instant};
-use std::collections::HashMap;
+use std::net::{ToSocketAddrs, SocketAddr};
+use std::time::{Duration};
 use clap::{App, load_yaml};
+use std::collections::HashMap;
 use colored::*;
-
-type Pinger = fn(&str) -> Result<()>;
-
-struct PingHandler {
-    protocol_map: HashMap<String, Pinger>,
-}
-
-impl PingHandler {
-    fn add_pinger(&mut self, protocol: String, func: Pinger) {
-        self.protocol_map.insert(protocol, func);
-    }
-
-    fn ping(&mut self, protocol: &str, target: &str) -> Result<Duration> {
-        let start_time = Instant::now();
-
-        match self.protocol_map[protocol](target) {
-            Ok(_) => (),
-            Err(err) => return Err(err),
-        };
-
-        let elapsed_time = start_time.elapsed();
-        Ok(elapsed_time)
-    }
-
-}
+mod pinger;
 
 fn resolve(domain: &str) -> Vec<SocketAddr> {
    domain.to_socket_addrs()
@@ -60,32 +35,11 @@ fn display_statistic(total_time: Duration, count: u64, recv_count: u64, lose_cou
             if lose_count == 0 { 0 } else { lose_count * 100 / count });
 }
 
-fn tcping(target: &str) -> Result<()> {
-    let mut stream = TcpStream::connect(target)?;
-    let mut buffer = [0; 1024];
-
-    stream.write(&[1])?;
-    stream.read(&mut buffer)?;
-    Ok(())
-}
-
-fn udping(target: &str) -> Result<()> {
-    let socket = UdpSocket::bind("127.0.0.1:0")?;
-    socket.connect(target)?;
-    socket.set_read_timeout(Some(Duration::new(5, 0)))?;
-    socket.set_write_timeout(Some(Duration::new(5, 0)))?;
-    let mut buffer = [0; 1024];
-
-    socket.send(&[1])?;
-    socket.recv_from(&mut buffer)?;
-    Ok(())
-}
-
 fn main() -> Result<()> {
     // init function map
-    let mut ping_handler = PingHandler { protocol_map: HashMap::new() };
-    ping_handler.add_pinger(String::from("TCP"), tcping);
-    ping_handler.add_pinger(String::from("UDP"), udping);
+    let mut ping_handler = pinger::PingHandler { protocol_map: HashMap::new() };
+    ping_handler.add_pinger(String::from("TCP"), pinger::tcping);
+    ping_handler.add_pinger(String::from("UDP"), pinger::udping);
 
     // load cli config
     let yaml = load_yaml!("cli.yaml");

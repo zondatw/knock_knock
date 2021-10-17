@@ -1,8 +1,8 @@
+use std::collections::HashMap;
 use std::io::prelude::*;
 use std::io::Result;
 use std::net::{TcpStream, UdpSocket};
 use std::time::{Duration, Instant};
-use std::collections::HashMap;
 
 type Pinger = fn(&str) -> Result<()>;
 
@@ -48,6 +48,3 @@ pub fn udping(target: &str) -> Result<()> {
     socket.recv_from(&mut buffer)?;
     Ok(())
 }
-
-
-

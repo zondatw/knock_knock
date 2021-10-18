@@ -4,6 +4,10 @@ use std::io::Result;
 use std::net::{TcpStream, UdpSocket};
 use std::time::{Duration, Instant};
 
+#[path = "tests/test_pinger.rs"]
+#[cfg(test)]
+mod test_pinger;
+
 type Pinger = fn(&str) -> Result<()>;
 
 pub struct PingHandler {

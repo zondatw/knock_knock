@@ -1,8 +1,13 @@
 use super::*;
 use std::time::Duration;
+use std::io::{Error,ErrorKind};
 
 fn testping(_target: &str) -> Result<()> {
     Ok(())
+}
+
+fn testping_error(_target: &str) -> Result<()> {
+    Result::Err(Error::new(ErrorKind::Other, "Test fail"))
 }
 
 #[test]
@@ -14,5 +19,19 @@ fn test_pinger() {
     ping_handler.add_pinger(String::from(protocol), testping);
 
     assert_eq!(Duration::new(0, 0).as_secs(), ping_handler.ping(protocol, "test").unwrap().as_secs());
+}
+
+#[test]
+fn test_pinger_error() {
+    let protocol = "Test";
+    let mut ping_handler = PingHandler {
+        protocol_map: HashMap::new(),
+    };
+    ping_handler.add_pinger(String::from(protocol), testping_error);
+
+    assert_eq!(
+        Err(ErrorKind::Other),
+        ping_handler.ping(protocol, "test").map_err(|e| e.kind())
+    );
 }
 

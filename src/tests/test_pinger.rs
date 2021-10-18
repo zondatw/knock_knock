@@ -35,3 +35,13 @@ fn test_pinger_error() {
     );
 }
 
+#[test]
+#[should_panic]
+fn test_pinger_not_exist() {
+    let mut ping_handler = PingHandler {
+        protocol_map: HashMap::new(),
+    };
+
+    ping_handler.ping("not exist", "test").err();
+}
+

@@ -1,6 +1,6 @@
 use super::*;
+use std::io::{Error, ErrorKind};
 use std::time::Duration;
-use std::io::{Error,ErrorKind};
 
 fn testping(_target: &str) -> Result<()> {
     Ok(())
@@ -18,7 +18,10 @@ fn test_pinger() {
     };
     ping_handler.add_pinger(String::from(protocol), testping);
 
-    assert_eq!(Duration::new(0, 0).as_secs(), ping_handler.ping(protocol, "test").unwrap().as_secs());
+    assert_eq!(
+        Duration::new(0, 0).as_secs(),
+        ping_handler.ping(protocol, "test").unwrap().as_secs()
+    );
 }
 
 #[test]
@@ -44,4 +47,3 @@ fn test_pinger_not_exist() {
 
     ping_handler.ping("not exist", "test").err();
 }
-

@@ -1,10 +1,10 @@
 use clap::{load_yaml, App};
 use colored::*;
+use pinger;
 use std::collections::HashMap;
 use std::io::Result;
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::time::Duration;
-use pinger;
 
 fn resolve(domain: &str) -> Vec<SocketAddr> {
     domain

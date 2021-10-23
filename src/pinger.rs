@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::io::prelude::*;
 use std::io::Result;
-use std::net::{TcpStream, UdpSocket, SocketAddr, ToSocketAddrs};
+use std::net::{SocketAddr, TcpStream, ToSocketAddrs, UdpSocket};
 use std::time::{Duration, Instant};
 
 #[path = "tests/test_pinger.rs"]

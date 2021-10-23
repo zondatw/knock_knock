@@ -43,6 +43,10 @@ pub fn tcping(target: &str) -> Result<()> {
     let mut stream = TcpStream::connect(target)?;
     let mut buffer = [0; 1024];
 
+    //set timeout
+    stream.set_read_timeout(Some(Duration::new(5, 0)))?;
+    stream.set_write_timeout(Some(Duration::new(5, 0)))?;
+
     stream.write(&[1])?;
     stream.read(&mut buffer)?;
     Ok(())
@@ -50,10 +54,12 @@ pub fn tcping(target: &str) -> Result<()> {
 
 pub fn udping(target: &str) -> Result<()> {
     let socket = UdpSocket::bind("127.0.0.1:0")?;
+    let mut buffer = [0; 1024];
     socket.connect(target)?;
+
+    //set timeout
     socket.set_read_timeout(Some(Duration::new(5, 0)))?;
     socket.set_write_timeout(Some(Duration::new(5, 0)))?;
-    let mut buffer = [0; 1024];
 
     socket.send(&[1])?;
     socket.recv_from(&mut buffer)?;

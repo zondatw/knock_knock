@@ -1,12 +1,19 @@
 use std::collections::HashMap;
 use std::io::prelude::*;
 use std::io::Result;
-use std::net::{TcpStream, UdpSocket};
+use std::net::{TcpStream, UdpSocket, SocketAddr, ToSocketAddrs};
 use std::time::{Duration, Instant};
 
 #[path = "tests/test_pinger.rs"]
 #[cfg(test)]
 mod test_pinger;
+
+pub fn resolve(domain: &str) -> Vec<SocketAddr> {
+    domain
+        .to_socket_addrs()
+        .expect("Unable to resolve domain")
+        .collect()
+}
 
 type Pinger = fn(&str) -> Result<()>;
 

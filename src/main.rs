@@ -3,15 +3,7 @@ use colored::*;
 use pinger;
 use std::collections::HashMap;
 use std::io::Result;
-use std::net::{SocketAddr, ToSocketAddrs};
 use std::time::Duration;
-
-fn resolve(domain: &str) -> Vec<SocketAddr> {
-    domain
-        .to_socket_addrs()
-        .expect("Unable to resolve domain")
-        .collect()
-}
 
 fn display_ping_info(target: &str, elapsed_time: Duration) {
     let console_str = format!(
@@ -69,7 +61,7 @@ fn main() -> Result<()> {
         .unwrap();
 
     // DNS resolve
-    let server = resolve(target);
+    let server = pinger::resolve(target);
     println!("DNS lookup: {:?}", server);
 
     // ping

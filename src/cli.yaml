@@ -15,6 +15,9 @@ args:
         short: p
         about: Which protocol you want to ping
         default_value: "TCP"
+        possible_values:
+          - TCP
+          - UDP
     - verbose:
         short: v
         multiple_occurrences: true

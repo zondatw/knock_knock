@@ -40,3 +40,16 @@ localhost:12000: fail
 total time: 904.381µs
 Connect time: 3, recv time: 1 (33%), lose time: 2 (66%)
 ```
+
+### Ping HTTP path
+
+```shell
+$ knock_knock localhost:8888/haha -p HTTP
+DNS lookup: [[::1]:8888, 127.0.0.1:8888]
+localhost:8888/haha: time=   2.54041 ms
+localhost:8888/haha: time=   2.61254 ms
+localhost:8888/haha: time=   3.63613 ms
+----- statistic -----
+total time: 8.789084ms
+Connect time: 3, recv time: 3 (100%), lose time: 0 (0%)
+```

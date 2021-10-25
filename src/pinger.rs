@@ -8,8 +8,13 @@ use std::time::{Duration, Instant};
 #[cfg(test)]
 mod test_pinger;
 
-pub fn resolve(domain: &str) -> Vec<SocketAddr> {
-    domain
+fn get_domain_path(url: &str) -> &str {
+    let s: Vec<&str> = url.split("/").collect();
+    s[0]
+}
+
+pub fn resolve(url: &str) -> Vec<SocketAddr> {
+    get_domain_path(url)
         .to_socket_addrs()
         .expect("Unable to resolve domain")
         .collect()
@@ -63,5 +68,18 @@ pub fn udping(target: &str) -> Result<()> {
 
     socket.send(&[1])?;
     socket.recv_from(&mut buffer)?;
+    Ok(())
+}
+
+pub fn httping(target: &str) -> Result<()> {
+    let mut stream = TcpStream::connect(get_domain_path(target))?;
+    let mut buffer = [0; 1024];
+
+    //set timeout
+    stream.set_read_timeout(Some(Duration::new(5, 0)))?;
+    stream.set_write_timeout(Some(Duration::new(5, 0)))?;
+
+    stream.write(format!("GET {} HTTP/1.1\r\nConnection: close\r\n\r\n", target).as_bytes())?;
+    stream.read(&mut buffer)?;
     Ok(())
 }

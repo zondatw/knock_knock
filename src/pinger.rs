@@ -82,7 +82,7 @@ pub fn httping(target: &str) -> Result<()> {
     stream.set_read_timeout(Some(Duration::new(5, 0)))?;
     stream.set_write_timeout(Some(Duration::new(5, 0)))?;
 
-    stream.write(format!("GET {} HTTP/1.1\r\nConnection: close\r\n\r\n", target).as_bytes())?;
+    stream.write(format!("GET {} HTTP/1.1\r\nUser-Agent: Knock Knock\r\nConnection: close\r\n\r\n", target).as_bytes())?;
     stream.read(&mut buffer)?;
 
     let buffer_str = String::from_utf8_lossy(&buffer);

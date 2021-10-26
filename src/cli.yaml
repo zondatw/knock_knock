@@ -18,7 +18,8 @@ args:
         possible_values:
           - TCP
           - UDP
-          - HTTP
+          - HTTP-GET
+          - HTTP-POST
     - verbose:
         short: v
         multiple_occurrences: true

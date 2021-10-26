@@ -47,7 +47,8 @@ fn main() -> Result<()> {
     };
     ping_handler.add_pinger(String::from("TCP"), pinger::tcping);
     ping_handler.add_pinger(String::from("UDP"), pinger::udping);
-    ping_handler.add_pinger(String::from("HTTP"), pinger::httping);
+    ping_handler.add_pinger(String::from("HTTP-GET"), pinger::httping_get);
+    ping_handler.add_pinger(String::from("HTTP-POST"), pinger::httping_post);
 
     // load cli config
     let yaml = load_yaml!("cli.yaml");

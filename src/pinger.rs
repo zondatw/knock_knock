@@ -1,8 +1,11 @@
 use std::collections::HashMap;
 use std::io::prelude::*;
 use std::io::Result;
+use std::io::{Error, ErrorKind};
 use std::net::{SocketAddr, TcpStream, ToSocketAddrs, UdpSocket};
 use std::time::{Duration, Instant};
+
+const BUF_SIZE: usize = 0xFF;
 
 #[path = "tests/test_pinger.rs"]
 #[cfg(test)]
@@ -46,7 +49,7 @@ impl PingHandler {
 
 pub fn tcping(target: &str) -> Result<()> {
     let mut stream = TcpStream::connect(target)?;
-    let mut buffer = [0; 1024];
+    let mut buffer = [0; BUF_SIZE];
 
     //set timeout
     stream.set_read_timeout(Some(Duration::new(5, 0)))?;
@@ -59,7 +62,7 @@ pub fn tcping(target: &str) -> Result<()> {
 
 pub fn udping(target: &str) -> Result<()> {
     let socket = UdpSocket::bind("127.0.0.1:0")?;
-    let mut buffer = [0; 1024];
+    let mut buffer = [0; BUF_SIZE];
     socket.connect(target)?;
 
     //set timeout
@@ -73,7 +76,7 @@ pub fn udping(target: &str) -> Result<()> {
 
 pub fn httping(target: &str) -> Result<()> {
     let mut stream = TcpStream::connect(get_domain_path(target))?;
-    let mut buffer = [0; 1024];
+    let mut buffer = [0; BUF_SIZE];
 
     //set timeout
     stream.set_read_timeout(Some(Duration::new(5, 0)))?;
@@ -81,5 +84,11 @@ pub fn httping(target: &str) -> Result<()> {
 
     stream.write(format!("GET {} HTTP/1.1\r\nConnection: close\r\n\r\n", target).as_bytes())?;
     stream.read(&mut buffer)?;
+
+    let buffer_str = String::from_utf8_lossy(&buffer);
+    let header: Vec<&str> = buffer_str.split("\r\n").collect();
+    if header[0].contains("404") {
+        return Result::Err(Error::new(ErrorKind::NotFound, "404"));
+    }
     Ok(())
 }

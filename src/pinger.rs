@@ -123,3 +123,28 @@ pub fn httping_post(target: &str) -> Result<()> {
     }
     Ok(())
 }
+
+pub fn httping_put(target: &str) -> Result<()> {
+    let mut stream = TcpStream::connect(get_domain_path(target))?;
+    let mut buffer = [0; BUF_SIZE];
+
+    //set timeout
+    stream.set_read_timeout(Some(Duration::new(5, 0)))?;
+    stream.set_write_timeout(Some(Duration::new(5, 0)))?;
+
+    stream.write(
+        format!(
+            "PUT {} HTTP/1.1\r\nUser-Agent: Knock Knock\r\nContent-Length: 2\r\n\r\n{{}}\r\n\r\n",
+            target
+        )
+        .as_bytes(),
+    )?;
+    stream.read(&mut buffer)?;
+
+    let buffer_str = String::from_utf8_lossy(&buffer);
+    let header: Vec<&str> = buffer_str.split("\r\n").collect();
+    if header[0].contains("404") {
+        return Result::Err(Error::new(ErrorKind::NotFound, "404"));
+    }
+    Ok(())
+}

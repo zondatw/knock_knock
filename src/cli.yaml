@@ -20,6 +20,7 @@ args:
           - UDP
           - HTTP-GET
           - HTTP-POST
+          - HTTP-PUT
     - verbose:
         short: v
         multiple_occurrences: true

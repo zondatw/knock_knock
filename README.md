@@ -14,7 +14,6 @@ $ cargo test
 ```
 
 ## Execution
-
 ### Ping TCP path
 
 ```shell
@@ -68,3 +67,16 @@ localhost:8888/haha: time=   3.63613 ms
 total time: 8.789084ms
 Connect time: 3, recv time: 3 (100%), lose time: 0 (0%)
 ```
+#### PUT 
+
+```shell
+$ knock_knock localhost:8888/haha -p HTTP-PUT
+DNS lookup: [[::1]:8888, 127.0.0.1:8888]
+localhost:8888/haha: time=   2.54041 ms
+localhost:8888/haha: time=   2.61254 ms
+localhost:8888/haha: time=   3.63613 ms
+----- statistic -----
+total time: 8.789084ms
+Connect time: 3, recv time: 3 (100%), lose time: 0 (0%)
+```
+

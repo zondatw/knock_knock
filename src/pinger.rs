@@ -270,14 +270,17 @@ pub fn httping_put(target: &str) -> Result<()> {
 }
 
 pub fn httping_delete(target: &str) -> Result<()> {
+    let mut uri = get_uri(target);
     httping(
         target,
         format!(
-            "DELETE {} HTTP/1.1\r\nUser-Agent: Knock Knock\r\n\r\n",
-            target
+            "DELETE {} HTTP/1.1\r\n\
+            HOST: {}\r\n\
+            User-Agent: Knock Knock\r\n\
+            \r\n",
+            uri.path,
+            uri.host,
         ),
     )?;
     Ok(())
 }
-
-

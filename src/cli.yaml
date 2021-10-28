@@ -21,6 +21,7 @@ args:
           - HTTP-GET
           - HTTP-POST
           - HTTP-PUT
+          - HTTP-DELETE
     - verbose:
         short: v
         multiple_occurrences: true

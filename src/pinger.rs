@@ -230,11 +230,20 @@ pub fn httping_get(target: &str) -> Result<()> {
 }
 
 pub fn httping_post(target: &str) -> Result<()> {
+    let mut uri = get_uri(target);
     httping(
         target,
         format!(
-            "POST {} HTTP/1.1\r\nUser-Agent: Knock Knock\r\nContent-Length: 2\r\n\r\n{{}}\r\n\r\n",
-            target
+            "POST {} HTTP/1.1\r\n\
+            HOST: {}\r\n\
+            User-Agent: Knock Knock\r\n\
+            Content-Length: 2\r\n\
+            \r\n
+            {}\r\n\
+            \r\n",
+            uri.path,
+            uri.host,
+            "{}",
         ),
     )?;
     Ok(())

@@ -6,6 +6,7 @@ use std::net::{SocketAddr, TcpStream, ToSocketAddrs, UdpSocket};
 use std::time::{Duration, Instant};
 
 const BUF_SIZE: usize = 0xFF;
+const HTTP_UNCONNECT_STATUS_CODE: &'static [&'static str] = &["404", "501"];
 
 #[path = "tests/test_pinger.rs"]
 #[cfg(test)]
@@ -87,8 +88,10 @@ fn httping(target: &str, body: String) -> Result<()> {
 
     let buffer_str = String::from_utf8_lossy(&buffer);
     let header: Vec<&str> = buffer_str.split("\r\n").collect();
-    if header[0].contains("404") {
-        return Result::Err(Error::new(ErrorKind::NotFound, "404"));
+    for status_code in HTTP_UNCONNECT_STATUS_CODE {
+        if header[0].contains(status_code) {
+            return Result::Err(Error::new(ErrorKind::NotFound, "404"));
+        }
     }
     Ok(())
 }

@@ -74,7 +74,7 @@ pub fn udping(target: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn httping_get(target: &str) -> Result<()> {
+fn httping(target: &str, body: String) -> Result<()> {
     let mut stream = TcpStream::connect(get_domain_path(target))?;
     let mut buffer = [0; BUF_SIZE];
 
@@ -82,13 +82,7 @@ pub fn httping_get(target: &str) -> Result<()> {
     stream.set_read_timeout(Some(Duration::new(5, 0)))?;
     stream.set_write_timeout(Some(Duration::new(5, 0)))?;
 
-    stream.write(
-        format!(
-            "GET {} HTTP/1.1\r\nUser-Agent: Knock Knock\r\nConnection: close\r\n\r\n",
-            target
-        )
-        .as_bytes(),
-    )?;
+    stream.write(body.as_bytes())?;
     stream.read(&mut buffer)?;
 
     let buffer_str = String::from_utf8_lossy(&buffer);
@@ -96,82 +90,50 @@ pub fn httping_get(target: &str) -> Result<()> {
     if header[0].contains("404") {
         return Result::Err(Error::new(ErrorKind::NotFound, "404"));
     }
+    Ok(())
+}
+
+pub fn httping_get(target: &str) -> Result<()> {
+    httping(
+        target,
+        format!(
+            "GET {} HTTP/1.1\r\nUser-Agent: Knock Knock\r\nConnection: close\r\n\r\n",
+            target
+        ),
+    )?;
     Ok(())
 }
 
 pub fn httping_post(target: &str) -> Result<()> {
-    let mut stream = TcpStream::connect(get_domain_path(target))?;
-    let mut buffer = [0; BUF_SIZE];
-
-    //set timeout
-    stream.set_read_timeout(Some(Duration::new(5, 0)))?;
-    stream.set_write_timeout(Some(Duration::new(5, 0)))?;
-
-    stream.write(
+    httping(
+        target,
         format!(
             "POST {} HTTP/1.1\r\nUser-Agent: Knock Knock\r\nContent-Length: 2\r\n\r\n{{}}\r\n\r\n",
             target
-        )
-        .as_bytes(),
+        ),
     )?;
-    stream.read(&mut buffer)?;
-
-    let buffer_str = String::from_utf8_lossy(&buffer);
-    let header: Vec<&str> = buffer_str.split("\r\n").collect();
-    if header[0].contains("404") {
-        return Result::Err(Error::new(ErrorKind::NotFound, "404"));
-    }
     Ok(())
 }
 
 pub fn httping_put(target: &str) -> Result<()> {
-    let mut stream = TcpStream::connect(get_domain_path(target))?;
-    let mut buffer = [0; BUF_SIZE];
-
-    //set timeout
-    stream.set_read_timeout(Some(Duration::new(5, 0)))?;
-    stream.set_write_timeout(Some(Duration::new(5, 0)))?;
-
-    stream.write(
+    httping(
+        target,
         format!(
             "PUT {} HTTP/1.1\r\nUser-Agent: Knock Knock\r\nContent-Length: 2\r\n\r\n{{}}\r\n\r\n",
             target
-        )
-        .as_bytes(),
+        ),
     )?;
-    stream.read(&mut buffer)?;
-
-    let buffer_str = String::from_utf8_lossy(&buffer);
-    let header: Vec<&str> = buffer_str.split("\r\n").collect();
-    if header[0].contains("404") {
-        return Result::Err(Error::new(ErrorKind::NotFound, "404"));
-    }
     Ok(())
 }
 
-
 pub fn httping_delete(target: &str) -> Result<()> {
-    let mut stream = TcpStream::connect(get_domain_path(target))?;
-    let mut buffer = [0; BUF_SIZE];
-
-    //set timeout
-    stream.set_read_timeout(Some(Duration::new(5, 0)))?;
-    stream.set_write_timeout(Some(Duration::new(5, 0)))?;
-
-    stream.write(
+    httping(
+        target,
         format!(
             "DELETE {} HTTP/1.1\r\nUser-Agent: Knock Knock\r\n\r\n",
             target
-        )
-        .as_bytes(),
+        ),
     )?;
-    stream.read(&mut buffer)?;
-
-    let buffer_str = String::from_utf8_lossy(&buffer);
-    let header: Vec<&str> = buffer_str.split("\r\n").collect();
-    if header[0].contains("404") {
-        return Result::Err(Error::new(ErrorKind::NotFound, "404"));
-    }
     Ok(())
 }
 

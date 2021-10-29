@@ -212,6 +212,22 @@ fn httping(target: &str, body: String) -> Result<()> {
     Ok(())
 }
 
+pub fn httping_connect(target: &str) -> Result<()> {
+    let mut uri = get_uri(target);
+    httping(
+        target,
+        format!(
+            "CONNECT {} HTTP/1.1\r\n\
+            HOST: {}\r\n\
+            User-Agent: Knock Knock\r\n\
+            \r\n",
+            uri.path,
+            uri.host,
+        ),
+    )?;
+    Ok(())
+}
+
 pub fn httping_get(target: &str) -> Result<()> {
     let mut uri = get_uri(target);
     httping(

@@ -218,7 +218,7 @@ pub fn httping_connect(target: &str) -> Result<()> {
         target,
         format!(
             "CONNECT {} HTTP/1.1\r\n\
-            HOST: {}\r\n\
+            Host: {}\r\n\
             User-Agent: Knock Knock\r\n\
             \r\n",
             uri.path,
@@ -234,7 +234,7 @@ pub fn httping_get(target: &str) -> Result<()> {
         target,
         format!(
             "GET {} HTTP/1.1\r\n\
-            HOST: {}\r\n\
+            Host: {}\r\n\
             User-Agent: Knock Knock\r\n\
             Connection: close\r\n\
             \r\n",
@@ -251,10 +251,11 @@ pub fn httping_post(target: &str) -> Result<()> {
         target,
         format!(
             "POST {} HTTP/1.1\r\n\
-            HOST: {}\r\n\
+            Host: {}\r\n\
             User-Agent: Knock Knock\r\n\
+            Content-Type: application/json\r\n\
             Content-Length: 2\r\n\
-            \r\n
+            \r\n\
             {}\r\n\
             \r\n",
             uri.path,
@@ -271,10 +272,11 @@ pub fn httping_put(target: &str) -> Result<()> {
         target,
         format!(
             "PUT {} HTTP/1.1\r\n\
-            HOST: {}\r\n\
+            Host: {}\r\n\
             User-Agent: Knock Knock\r\n\
+            Content-Type: application/json\r\n\
             Content-Length: 2\r\n\
-            \r\n
+            \r\n\
             {}\r\n\
             \r\n",
             uri.path,
@@ -291,7 +293,7 @@ pub fn httping_delete(target: &str) -> Result<()> {
         target,
         format!(
             "DELETE {} HTTP/1.1\r\n\
-            HOST: {}\r\n\
+            Host: {}\r\n\
             User-Agent: Knock Knock\r\n\
             \r\n",
             uri.path,

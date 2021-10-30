@@ -23,6 +23,7 @@ args:
           - HTTP-POST
           - HTTP-PUT
           - HTTP-DELETE
+          - HTTP-PATCH
     - verbose:
         short: v
         multiple_occurrences: true

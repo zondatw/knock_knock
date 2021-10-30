@@ -52,6 +52,7 @@ fn main() -> Result<()> {
     ping_handler.add_pinger(String::from("HTTP-POST"), pinger::httping_post);
     ping_handler.add_pinger(String::from("HTTP-PUT"), pinger::httping_put);
     ping_handler.add_pinger(String::from("HTTP-DELETE"), pinger::httping_delete);
+    ping_handler.add_pinger(String::from("HTTP-PATCH"), pinger::httping_patch);
 
     // load cli config
     let yaml = load_yaml!("cli.yaml");

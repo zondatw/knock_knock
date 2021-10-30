@@ -196,8 +196,7 @@ fn httping(target: &str, body: String) -> Result<()> {
     let mut buffer = [0; BUF_SIZE];
 
     //set timeout
-    stream.set_read_timeout(Some(Duration::new(5, 0)))?;
-    stream.set_write_timeout(Some(Duration::new(5, 0)))?;
+    stream.set_read_timeout(Some(Duration::new(5, 0)))?; stream.set_write_timeout(Some(Duration::new(5, 0)))?;
 
     stream.write(body.as_bytes())?;
     stream.read(&mut buffer)?;
@@ -302,3 +301,25 @@ pub fn httping_delete(target: &str) -> Result<()> {
     )?;
     Ok(())
 }
+pub fn httping_patch(target: &str) -> Result<()> {
+    let mut uri = get_uri(target);
+    httping(
+        target,
+        format!(
+            "PATCH {} HTTP/1.1\r\n\
+            Host: {}\r\n\
+            User-Agent: Knock Knock\r\n\
+            Content-Type: application/json\r\n\
+            Content-Length: 2\r\n\
+            \r\n\
+            {}\r\n\
+            \r\n",
+            uri.path,
+            uri.host,
+            "{}",
+        ),
+    )?;
+    Ok(())
+}
+
+

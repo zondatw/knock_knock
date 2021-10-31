@@ -134,7 +134,8 @@ fn get_domain_path(url: &str) -> &str {
 }
 
 pub fn resolve(url: &str) -> Vec<SocketAddr> {
-    get_domain_path(url)
+    let uri = get_uri(url);
+    uri.domain.as_str()
         .to_socket_addrs()
         .expect("Unable to resolve domain")
         .collect()

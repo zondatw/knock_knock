@@ -215,7 +215,7 @@ fn httping(target: &str, body: String) -> Result<()> {
 }
 
 pub fn httping_connect(target: &str) -> Result<()> {
-    let mut uri = get_uri(target);
+    let uri = get_uri(target);
     httping(
         target,
         format!(
@@ -231,7 +231,7 @@ pub fn httping_connect(target: &str) -> Result<()> {
 }
 
 pub fn httping_get(target: &str) -> Result<()> {
-    let mut uri = get_uri(target);
+    let uri = get_uri(target);
     httping(
         target,
         format!(
@@ -248,7 +248,7 @@ pub fn httping_get(target: &str) -> Result<()> {
 }
 
 pub fn httping_post(target: &str) -> Result<()> {
-    let mut uri = get_uri(target);
+    let uri = get_uri(target);
     httping(
         target,
         format!(
@@ -269,7 +269,7 @@ pub fn httping_post(target: &str) -> Result<()> {
 }
 
 pub fn httping_put(target: &str) -> Result<()> {
-    let mut uri = get_uri(target);
+    let uri = get_uri(target);
     httping(
         target,
         format!(
@@ -290,7 +290,7 @@ pub fn httping_put(target: &str) -> Result<()> {
 }
 
 pub fn httping_delete(target: &str) -> Result<()> {
-    let mut uri = get_uri(target);
+    let uri = get_uri(target);
     httping(
         target,
         format!(
@@ -305,7 +305,7 @@ pub fn httping_delete(target: &str) -> Result<()> {
     Ok(())
 }
 pub fn httping_patch(target: &str) -> Result<()> {
-    let mut uri = get_uri(target);
+    let uri = get_uri(target);
     httping(
         target,
         format!(

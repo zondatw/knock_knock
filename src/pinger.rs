@@ -128,9 +128,11 @@ pub fn get_uri(url: &str) -> URI {
     uri
 }
 
-fn get_domain_path(url: &str) -> &str {
-    let s: Vec<&str> = url.split("/").collect();
-    s[0]
+fn get_host_path(url: &str) -> String {
+    // let s: Vec<&str> = url.split("/").collect();
+    // s[0]
+    let uri = get_uri(url);
+    uri.host
 }
 
 pub fn resolve(url: &str) -> Vec<SocketAddr> {
@@ -193,7 +195,7 @@ pub fn udping(target: &str) -> Result<()> {
 }
 
 fn httping(target: &str, body: String) -> Result<()> {
-    let mut stream = TcpStream::connect(get_domain_path(target))?;
+    let mut stream = TcpStream::connect(get_host_path(target).as_str())?;
     let mut buffer = [0; BUF_SIZE];
 
     //set timeout

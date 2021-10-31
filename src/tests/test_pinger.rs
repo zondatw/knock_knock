@@ -11,10 +11,10 @@ fn testping_error(_target: &str) -> Result<()> {
 }
 
 #[test]
-fn test_get_domain_path() {
-    assert_eq!(get_domain_path("domain.com:80"), "domain.com:80");
+fn test_get_host_path() {
+    assert_eq!(get_host_path("domain.com:80"), "domain.com:80");
     assert_eq!(
-        get_domain_path("domain.com:80/test/path?param=123#frag"),
+        get_host_path("domain.com:80/test/path?param=123#frag"),
         "domain.com:80"
     );
 }

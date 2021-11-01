@@ -1,23 +1,26 @@
 use std::collections::HashMap;
-use std::io::prelude::*;
 use std::io::Result;
-use std::io::{Error, ErrorKind};
-use std::net::{SocketAddr, TcpStream, ToSocketAddrs, UdpSocket};
+use std::net::{SocketAddr, ToSocketAddrs};
 use std::time::{Duration, Instant};
-
-mod uri;
 
 #[path = "tests/test_pinger.rs"]
 #[cfg(test)]
 mod test_pinger;
 
-const BUF_SIZE: usize = 0xFF;
-const HTTP_UNCONNECT_STATUS_CODE: &'static [&'static str] = &["404", "501"];
+pub mod uri;
+mod level4;
+mod http;
+
+pub use crate::level4::{tcping, udping};
+pub use crate::http::{
+    httping_connect, httping_get, httping_post, httping_put, httping_delete, httping_patch,
+};
+
+pub(crate) const BUF_SIZE: usize = 0xFF;
+pub(crate) const HTTP_UNCONNECT_STATUS_CODE: &'static [&'static str] = &["404", "501"];
 
 
-fn get_host_path(url: &str) -> String {
-    // let s: Vec<&str> = url.split("/").collect();
-    // s[0]
+pub(crate) fn get_host_path(url: &str) -> String {
     let uri = uri::get_uri(url);
     uri.host
 }
@@ -53,163 +56,3 @@ impl PingHandler {
         Ok(elapsed_time)
     }
 }
-
-pub fn tcping(target: &str) -> Result<()> {
-    let mut stream = TcpStream::connect(target)?;
-    let mut buffer = [0; BUF_SIZE];
-
-    //set timeout
-    stream.set_read_timeout(Some(Duration::new(5, 0)))?;
-    stream.set_write_timeout(Some(Duration::new(5, 0)))?;
-
-    stream.write(&[1])?;
-    stream.read(&mut buffer)?;
-    Ok(())
-}
-
-pub fn udping(target: &str) -> Result<()> {
-    let socket = UdpSocket::bind("127.0.0.1:0")?;
-    let mut buffer = [0; BUF_SIZE];
-    socket.connect(target)?;
-
-    //set timeout
-    socket.set_read_timeout(Some(Duration::new(5, 0)))?;
-    socket.set_write_timeout(Some(Duration::new(5, 0)))?;
-
-    socket.send(&[1])?;
-    socket.recv_from(&mut buffer)?;
-    Ok(())
-}
-
-fn httping(target: &str, body: String) -> Result<()> {
-    let mut stream = TcpStream::connect(get_host_path(target).as_str())?;
-    let mut buffer = [0; BUF_SIZE];
-
-    //set timeout
-    stream.set_read_timeout(Some(Duration::new(5, 0)))?; stream.set_write_timeout(Some(Duration::new(5, 0)))?;
-
-    stream.write(body.as_bytes())?;
-    stream.read(&mut buffer)?;
-
-    let buffer_str = String::from_utf8_lossy(&buffer);
-    let header: Vec<&str> = buffer_str.split("\r\n").collect();
-    for status_code in HTTP_UNCONNECT_STATUS_CODE {
-        if header[0].contains(status_code) {
-            return Result::Err(Error::new(ErrorKind::NotFound, "404"));
-        }
-    }
-    Ok(())
-}
-
-pub fn httping_connect(target: &str) -> Result<()> {
-    let uri = uri::get_uri(target);
-    httping(
-        target,
-        format!(
-            "CONNECT {} HTTP/1.1\r\n\
-            Host: {}\r\n\
-            User-Agent: Knock Knock\r\n\
-            \r\n",
-            uri.path,
-            uri.host,
-        ),
-    )?;
-    Ok(())
-}
-
-pub fn httping_get(target: &str) -> Result<()> {
-    let uri = uri::get_uri(target);
-    httping(
-        target,
-        format!(
-            "GET {} HTTP/1.1\r\n\
-            Host: {}\r\n\
-            User-Agent: Knock Knock\r\n\
-            Connection: close\r\n\
-            \r\n",
-            uri.path,
-            uri.host,
-        ),
-    )?;
-    Ok(())
-}
-
-pub fn httping_post(target: &str) -> Result<()> {
-    let uri = uri::get_uri(target);
-    httping(
-        target,
-        format!(
-            "POST {} HTTP/1.1\r\n\
-            Host: {}\r\n\
-            User-Agent: Knock Knock\r\n\
-            Content-Type: application/json\r\n\
-            Content-Length: 2\r\n\
-            \r\n\
-            {}\r\n\
-            \r\n",
-            uri.path,
-            uri.host,
-            "{}",
-        ),
-    )?;
-    Ok(())
-}
-
-pub fn httping_put(target: &str) -> Result<()> {
-    let uri = uri::get_uri(target);
-    httping(
-        target,
-        format!(
-            "PUT {} HTTP/1.1\r\n\
-            Host: {}\r\n\
-            User-Agent: Knock Knock\r\n\
-            Content-Type: application/json\r\n\
-            Content-Length: 2\r\n\
-            \r\n\
-            {}\r\n\
-            \r\n",
-            uri.path,
-            uri.host,
-            "{}",
-        ),
-    )?;
-    Ok(())
-}
-
-pub fn httping_delete(target: &str) -> Result<()> {
-    let uri = uri::get_uri(target);
-    httping(
-        target,
-        format!(
-            "DELETE {} HTTP/1.1\r\n\
-            Host: {}\r\n\
-            User-Agent: Knock Knock\r\n\
-            \r\n",
-            uri.path,
-            uri.host,
-        ),
-    )?;
-    Ok(())
-}
-pub fn httping_patch(target: &str) -> Result<()> {
-    let uri = uri::get_uri(target);
-    httping(
-        target,
-        format!(
-            "PATCH {} HTTP/1.1\r\n\
-            Host: {}\r\n\
-            User-Agent: Knock Knock\r\n\
-            Content-Type: application/json\r\n\
-            Content-Length: 2\r\n\
-            \r\n\
-            {}\r\n\
-            \r\n",
-            uri.path,
-            uri.host,
-            "{}",
-        ),
-    )?;
-    Ok(())
-}
-
-

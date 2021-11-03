@@ -74,9 +74,9 @@ impl URI {
         Ok(())
     }
 
-    fn get_url(&mut self) -> String {
+    pub fn get_url(&mut self) -> String {
         format!(
-            "{}://{}:{}@{}{}{}#{}",
+            "{}://{}:{}@{}{}?{}#{}",
             self.scheme,
             self.username,
             self.password,
@@ -111,6 +111,23 @@ impl URI {
     }
 }
 
+/// Parse url to uri object
+/// # Examples
+/// 
+/// ```
+/// let url: &str = "http://admin:password@sub.domain.org:9999/api/haha?name=test&age=18#YOOO";
+/// let mut uri_obj = pinger::uri::get_uri(url);
+/// assert_eq!(uri_obj.scheme, String::from("http"));
+/// assert_eq!(uri_obj.username, String::from("admin"));
+/// assert_eq!(uri_obj.password, String::from("password"));
+/// assert_eq!(uri_obj.host, String::from("sub.domain.org:9999"));
+/// assert_eq!(uri_obj.domain, String::from("sub.domain.org"));
+/// assert_eq!(uri_obj.port, 9999);
+/// assert_eq!(uri_obj.path, String::from("/api/haha"));
+/// assert_eq!(uri_obj.query, String::from("name=test&age=18"));
+/// assert_eq!(uri_obj.fragment, String::from("YOOO"));
+/// assert_eq!(uri_obj.get_url(), String::from(url));
+/// ```
 pub fn get_uri(url: &str) -> URI {
     let mut uri = URI::default();
     uri.parse(url);

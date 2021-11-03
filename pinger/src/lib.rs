@@ -7,18 +7,17 @@ use std::time::{Duration, Instant};
 #[cfg(test)]
 mod test_pinger;
 
-pub mod uri;
-mod level4;
 mod http;
+mod level4;
+pub mod uri;
 
-pub use crate::level4::{tcping, udping};
 pub use crate::http::{
-    httping_connect, httping_get, httping_post, httping_put, httping_delete, httping_patch,
+    httping_connect, httping_delete, httping_get, httping_patch, httping_post, httping_put,
 };
+pub use crate::level4::{tcping, udping};
 
 pub(crate) const BUF_SIZE: usize = 0xFF;
 pub(crate) const HTTP_UNCONNECT_STATUS_CODE: &'static [&'static str] = &["404", "501"];
-
 
 pub(crate) fn get_host_path(url: &str) -> String {
     let uri = uri::get_uri(url);
@@ -27,7 +26,8 @@ pub(crate) fn get_host_path(url: &str) -> String {
 
 pub fn resolve(url: &str) -> Vec<SocketAddr> {
     let uri = uri::get_uri(url);
-    uri.host.as_str()
+    uri.host
+        .as_str()
         .to_socket_addrs()
         .expect("Unable to resolve domain")
         .collect()

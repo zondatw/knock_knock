@@ -1,11 +1,11 @@
-use std::io::Result;
 use std::io::prelude::*;
+use std::io::Result;
 use std::io::{Error, ErrorKind};
-use std::net::{TcpStream};
-use std::time::{Duration};
+use std::net::TcpStream;
+use std::time::Duration;
 
-use crate::uri::{get_uri};
-use crate::{get_host_path};
+use crate::get_host_path;
+use crate::uri::get_uri;
 use crate::{BUF_SIZE, HTTP_UNCONNECT_STATUS_CODE};
 
 fn httping(target: &str, body: String) -> Result<()> {
@@ -13,7 +13,8 @@ fn httping(target: &str, body: String) -> Result<()> {
     let mut buffer = [0; BUF_SIZE];
 
     //set timeout
-    stream.set_read_timeout(Some(Duration::new(5, 0)))?; stream.set_write_timeout(Some(Duration::new(5, 0)))?;
+    stream.set_read_timeout(Some(Duration::new(5, 0)))?;
+    stream.set_write_timeout(Some(Duration::new(5, 0)))?;
 
     stream.write(body.as_bytes())?;
     stream.read(&mut buffer)?;
@@ -37,8 +38,7 @@ pub fn httping_connect(target: &str) -> Result<()> {
             Host: {}\r\n\
             User-Agent: Knock Knock\r\n\
             \r\n",
-            uri.path,
-            uri.host,
+            uri.path, uri.host,
         ),
     )?;
     Ok(())
@@ -54,8 +54,7 @@ pub fn httping_get(target: &str) -> Result<()> {
             User-Agent: Knock Knock\r\n\
             Connection: close\r\n\
             \r\n",
-            uri.path,
-            uri.host,
+            uri.path, uri.host,
         ),
     )?;
     Ok(())
@@ -74,9 +73,7 @@ pub fn httping_post(target: &str) -> Result<()> {
             \r\n\
             {}\r\n\
             \r\n",
-            uri.path,
-            uri.host,
-            "{}",
+            uri.path, uri.host, "{}",
         ),
     )?;
     Ok(())
@@ -95,9 +92,7 @@ pub fn httping_put(target: &str) -> Result<()> {
             \r\n\
             {}\r\n\
             \r\n",
-            uri.path,
-            uri.host,
-            "{}",
+            uri.path, uri.host, "{}",
         ),
     )?;
     Ok(())
@@ -112,8 +107,7 @@ pub fn httping_delete(target: &str) -> Result<()> {
             Host: {}\r\n\
             User-Agent: Knock Knock\r\n\
             \r\n",
-            uri.path,
-            uri.host,
+            uri.path, uri.host,
         ),
     )?;
     Ok(())
@@ -131,9 +125,7 @@ pub fn httping_patch(target: &str) -> Result<()> {
             \r\n\
             {}\r\n\
             \r\n",
-            uri.path,
-            uri.host,
-            "{}",
+            uri.path, uri.host, "{}",
         ),
     )?;
     Ok(())

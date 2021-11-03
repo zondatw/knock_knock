@@ -1,9 +1,9 @@
 use std::io::prelude::*;
 use std::io::Result;
 use std::net::{TcpStream, UdpSocket};
-use std::time::{Duration};
+use std::time::Duration;
 
-use crate::{BUF_SIZE};
+use crate::BUF_SIZE;
 
 pub fn tcping(target: &str) -> Result<()> {
     let mut stream = TcpStream::connect(target)?;

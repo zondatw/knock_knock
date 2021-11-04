@@ -76,16 +76,21 @@ impl URI {
     }
 
     pub fn get_url(&mut self) -> String {
-        format!(
-            "{}://{}:{}@{}{}?{}#{}",
-            self.scheme,
-            self.username,
-            self.password,
-            self.host,
-            self.path,
-            self.query,
-            self.fragment,
-        )
+        let mut url = format!("{}://", self.scheme);
+        if (self.username != "" || self.password != "") {
+            url = format!("{}{}:{}@", url, self.username, self.password);
+        }
+        url = format!("{}{}", url, self.host);
+        if (self.path != "") {
+            url = format!("{}{}", url, self.path);
+        }
+        if (self.query != "") {
+            url = format!("{}?{}", url, self.query);
+        }
+        if (self.fragment != "") {
+            url = format!("{}#{}", url, self.fragment);
+        }
+        url
     }
 
     fn display(&mut self) {
@@ -117,7 +122,7 @@ impl URI {
 /// # Examples
 ///
 /// ```
-/// let url: &str = "http://admin:password@sub.domain.org:9999/api/haha?name=test&age=18#YOOO";
+/// let mut url: &str = "http://admin:password@sub.domain.org:9999/api/haha?name=test&age=18#YOOO";
 /// let mut uri_obj = pinger::uri::get_uri(url);
 /// assert_eq!(uri_obj.scheme, String::from("http"));
 /// assert_eq!(uri_obj.username, String::from("admin"));
@@ -128,6 +133,19 @@ impl URI {
 /// assert_eq!(uri_obj.path, String::from("/api/haha"));
 /// assert_eq!(uri_obj.query, String::from("name=test&age=18"));
 /// assert_eq!(uri_obj.fragment, String::from("YOOO"));
+/// assert_eq!(uri_obj.get_url(), String::from(url));
+///
+/// url = "http://sub.domain.org:80/";
+/// let mut uri_obj = pinger::uri::get_uri(url);
+/// assert_eq!(uri_obj.scheme, String::from("http"));
+/// assert_eq!(uri_obj.username, String::from(""));
+/// assert_eq!(uri_obj.password, String::from(""));
+/// assert_eq!(uri_obj.host, String::from("sub.domain.org:80"));
+/// assert_eq!(uri_obj.domain, String::from("sub.domain.org"));
+/// assert_eq!(uri_obj.port, 80);
+/// assert_eq!(uri_obj.path, String::from("/"));
+/// assert_eq!(uri_obj.query, String::from(""));
+/// assert_eq!(uri_obj.fragment, String::from(""));
 /// assert_eq!(uri_obj.get_url(), String::from(url));
 /// ```
 pub fn get_uri(url: &str) -> URI {

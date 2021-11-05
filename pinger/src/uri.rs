@@ -77,17 +77,17 @@ impl URI {
 
     pub fn get_url(&mut self) -> String {
         let mut url = format!("{}://", self.scheme);
-        if (self.username != "" || self.password != "") {
+        if self.username != "" || self.password != "" {
             url = format!("{}{}:{}@", url, self.username, self.password);
         }
         url = format!("{}{}", url, self.host);
-        if (self.path != "") {
+        if self.path != "" {
             url = format!("{}{}", url, self.path);
         }
-        if (self.query != "") {
+        if self.query != "" {
             url = format!("{}?{}", url, self.query);
         }
-        if (self.fragment != "") {
+        if self.fragment != "" {
             url = format!("{}#{}", url, self.fragment);
         }
         url

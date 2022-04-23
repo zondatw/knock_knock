@@ -1,5 +1,5 @@
 name: Knock Knock 
-version: "1.0.0"
+version: "1.0.2"
 author: Zonda Yang <u226699@gmail.com>
 about: CLI tool for ping protocols
 args:

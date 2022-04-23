@@ -124,7 +124,7 @@ impl URI {
 ///
 /// ```
 /// let mut url: &str = "http://admin:password@sub.domain.org:9999/api/haha?name=test&age=18#YOOO";
-/// let mut uri_obj = pinger::uri::get_uri(url);
+/// let mut uri_obj = zpinger::uri::get_uri(url);
 /// assert_eq!(uri_obj.scheme, String::from("http"));
 /// assert_eq!(uri_obj.username, String::from("admin"));
 /// assert_eq!(uri_obj.password, String::from("password"));
@@ -137,7 +137,7 @@ impl URI {
 /// assert_eq!(uri_obj.get_url(), String::from(url));
 ///
 /// url = "http://sub.domain.org:80/";
-/// let mut uri_obj = pinger::uri::get_uri(url);
+/// let mut uri_obj = zpinger::uri::get_uri(url);
 /// assert_eq!(uri_obj.scheme, String::from("http"));
 /// assert_eq!(uri_obj.username, String::from(""));
 /// assert_eq!(uri_obj.password, String::from(""));

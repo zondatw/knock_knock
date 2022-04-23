@@ -1,4 +1,4 @@
-use clap::{load_yaml, App};
+use clap;
 use colored::*;
 use std::collections::HashMap;
 use std::io::Result;
@@ -55,8 +55,8 @@ fn main() -> Result<()> {
     ping_handler.add_pinger(String::from("HTTP-PATCH"), zpinger::httping_patch);
 
     // load cli config
-    let yaml = load_yaml!("cli.yaml");
-    let args = App::from(yaml).get_matches();
+    let yaml = clap::load_yaml!("cli.yaml");
+    let args = clap::App::from_yaml(yaml).get_matches();
 
     // parse args
     let target = args.value_of("Domain").unwrap();

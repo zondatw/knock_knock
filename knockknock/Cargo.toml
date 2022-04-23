@@ -1,5 +1,5 @@
 [package]
-name = "knock_knock"
+name = "knockknock"
 version = "1.0.0"
 authors = ["Zonda Yang <u226699@gmail.com>"]
 description = "CLI tool for ping protocols"

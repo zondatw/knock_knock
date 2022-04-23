@@ -117,7 +117,7 @@ version = "1.0.0"
 dependencies = [
  "clap",
  "colored",
- "pinger",
+ "zpinger",
 ]
 
 [[package]]
@@ -151,13 +151,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "addaa943333a514159c80c97ff4a93306530d965d27e139188283cd13e06a799"
 dependencies = [
  "memchr",
-]
-
-[[package]]
-name = "pinger"
-version = "0.1.0"
-dependencies = [
- "regex",
 ]
 
 [[package]]
@@ -325,4 +318,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "56c1936c4cc7a1c9ab21a1ebb602eb942ba868cbd44a99cb7cdc5892335e1c85"
 dependencies = [
  "linked-hash-map",
+]
+
+[[package]]
+name = "zpinger"
+version = "0.1.0"
+dependencies = [
+ "regex",
 ]

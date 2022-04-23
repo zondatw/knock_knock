@@ -1,6 +1,6 @@
 use clap::{load_yaml, App};
 use colored::*;
-use pinger;
+use zpinger;
 use std::collections::HashMap;
 use std::io::Result;
 use std::time::Duration;
@@ -42,17 +42,17 @@ fn display_statistic(total_time: Duration, count: u64, recv_count: u64, lose_cou
 
 fn main() -> Result<()> {
     // init function map
-    let mut ping_handler = pinger::PingHandler {
+    let mut ping_handler = zpinger::PingHandler {
         protocol_map: HashMap::new(),
     };
-    ping_handler.add_pinger(String::from("TCP"), pinger::tcping);
-    ping_handler.add_pinger(String::from("UDP"), pinger::udping);
-    ping_handler.add_pinger(String::from("HTTP-CONNECT"), pinger::httping_connect);
-    ping_handler.add_pinger(String::from("HTTP-GET"), pinger::httping_get);
-    ping_handler.add_pinger(String::from("HTTP-POST"), pinger::httping_post);
-    ping_handler.add_pinger(String::from("HTTP-PUT"), pinger::httping_put);
-    ping_handler.add_pinger(String::from("HTTP-DELETE"), pinger::httping_delete);
-    ping_handler.add_pinger(String::from("HTTP-PATCH"), pinger::httping_patch);
+    ping_handler.add_pinger(String::from("TCP"), zpinger::tcping);
+    ping_handler.add_pinger(String::from("UDP"), zpinger::udping);
+    ping_handler.add_pinger(String::from("HTTP-CONNECT"), zpinger::httping_connect);
+    ping_handler.add_pinger(String::from("HTTP-GET"), zpinger::httping_get);
+    ping_handler.add_pinger(String::from("HTTP-POST"), zpinger::httping_post);
+    ping_handler.add_pinger(String::from("HTTP-PUT"), zpinger::httping_put);
+    ping_handler.add_pinger(String::from("HTTP-DELETE"), zpinger::httping_delete);
+    ping_handler.add_pinger(String::from("HTTP-PATCH"), zpinger::httping_patch);
 
     // load cli config
     let yaml = load_yaml!("cli.yaml");
@@ -67,7 +67,7 @@ fn main() -> Result<()> {
         .unwrap();
 
     // DNS resolve
-    let server = pinger::resolve(target);
+    let server = zpinger::resolve(target);
     println!("DNS lookup: {:?}", server);
 
     // ping

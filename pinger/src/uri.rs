@@ -93,6 +93,7 @@ impl URI {
         url
     }
 
+    #[allow(dead_code)]
     fn display(&mut self) {
         println!(
             "URI:\n\
@@ -150,6 +151,8 @@ impl URI {
 /// ```
 pub fn get_uri(url: &str) -> URI {
     let mut uri = URI::default();
-    uri.parse(url);
+    #[allow(unused_must_use)] {
+        uri.parse(url);
+    }
     uri
 }

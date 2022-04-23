@@ -1,7 +1,12 @@
 [package]
 name = "knock_knock"
-version = "0.1.0"
-edition = "2018"
+version = "1.0.0"
+authors = ["Zonda Yang <u226699@gmail.com>"]
+description = "CLI tool for ping protocols"
+homepage = "https://github.com/zondatw/knock_knock"
+repository = "https://github.com/zondatw/knock_knock"
+edition = "2021"
+license = "MIT"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

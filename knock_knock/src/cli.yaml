@@ -1,7 +1,7 @@
 name: Knock Knock 
-version: "1.0"
+version: "1.0.0"
 author: Zonda Yang <u226699@gmail.com>
-about: Ping protocol
+about: CLI tool for ping protocols
 args:
     - Domain:
         about: Set domain which you want to check exist

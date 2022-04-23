@@ -151,7 +151,8 @@ impl URI {
 /// ```
 pub fn get_uri(url: &str) -> URI {
     let mut uri = URI::default();
-    #[allow(unused_must_use)] {
+    #[allow(unused_must_use)]
+    {
         uri.parse(url);
     }
     uri

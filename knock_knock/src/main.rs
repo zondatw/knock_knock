@@ -1,9 +1,9 @@
 use clap::{load_yaml, App};
 use colored::*;
-use zpinger;
 use std::collections::HashMap;
 use std::io::Result;
 use std::time::Duration;
+use zpinger;
 
 fn display_ping_info(target: &str, elapsed_time: Duration) {
     let console_str = format!(

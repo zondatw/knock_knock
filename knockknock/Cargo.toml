@@ -1,6 +1,6 @@
 [package]
 name = "knockknock"
-version = "1.0.0"
+version = "1.0.1"
 authors = ["Zonda Yang <u226699@gmail.com>"]
 description = "CLI tool for ping protocols"
 homepage = "https://github.com/zondatw/knock_knock"

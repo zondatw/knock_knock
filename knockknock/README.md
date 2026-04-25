@@ -72,28 +72,63 @@ Connect time: 3, recv time: 3 (100%), lose time: 0 (0%)
 
 ```shell
 $ knockknock http get localhost:8888/haha
+DNS lookup: [[::1]:8888, 127.0.0.1:8888]
+localhost:8888/haha: time=   2.54041 ms
+localhost:8888/haha: time=   2.61254 ms
+localhost:8888/haha: time=   3.63613 ms
+----- statistic -----
+total time: 8.789084ms
+Connect time: 3, recv time: 3 (100%), lose time: 0 (0%)
 ```
 
 #### POST
 
 ```shell
 $ knockknock http post localhost:8888/haha
+DNS lookup: [[::1]:8888, 127.0.0.1:8888]
+localhost:8888/haha: time=   2.54041 ms
+localhost:8888/haha: time=   2.61254 ms
+localhost:8888/haha: time=   3.63613 ms
+----- statistic -----
+total time: 8.789084ms
+Connect time: 3, recv time: 3 (100%), lose time: 0 (0%)
 ```
 
 #### PUT
 
 ```shell
 $ knockknock http put localhost:8888/haha
+DNS lookup: [[::1]:8888, 127.0.0.1:8888]
+localhost:8888/haha: time=   2.54041 ms
+localhost:8888/haha: time=   2.61254 ms
+localhost:8888/haha: time=   3.63613 ms
+----- statistic -----
+total time: 8.789084ms
+Connect time: 3, recv time: 3 (100%), lose time: 0 (0%)
 ```
 
 #### DELETE
 
 ```shell
 $ knockknock http delete localhost:8888/haha
+DNS lookup: [[::1]:8888, 127.0.0.1:8888]
+localhost:8888/haha: time=   2.54041 ms
+localhost:8888/haha: time=   2.61254 ms
+localhost:8888/haha: time=   3.63613 ms
+----- statistic -----
+total time: 8.789084ms
+Connect time: 3, recv time: 3 (100%), lose time: 0 (0%)
 ```
 
 #### PATCH
 
 ```shell
 $ knockknock http patch localhost:8888/haha
+DNS lookup: [[::1]:8888, 127.0.0.1:8888]
+localhost:8888/haha: time=   2.54041 ms
+localhost:8888/haha: time=   2.61254 ms
+localhost:8888/haha: time=   3.63613 ms
+----- statistic -----
+total time: 8.789084ms
+Connect time: 3, recv time: 3 (100%), lose time: 0 (0%)
 ```

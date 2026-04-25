@@ -126,3 +126,83 @@ fn main() -> Result<()> {
     display_statistic(total_time, count, count - lose_count, lose_count);
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse(args: &[&str]) -> Cli {
+        Cli::try_parse_from(args).expect("CLI should parse")
+    }
+
+    #[test]
+    fn parses_tcp() {
+        let cli = parse(&["knockknock", "tcp", "localhost:8000", "-c", "3"]);
+        let (proto, target) = resolve_protocol(&cli.command);
+        assert_eq!(proto, "TCP");
+        assert_eq!(target, "localhost:8000");
+        assert_eq!(cli.count, 3);
+    }
+
+    #[test]
+    fn parses_udp() {
+        let cli = parse(&["knockknock", "udp", "localhost:12000"]);
+        let (proto, target) = resolve_protocol(&cli.command);
+        assert_eq!(proto, "UDP");
+        assert_eq!(target, "localhost:12000");
+    }
+
+    #[test]
+    fn parses_all_http_methods() {
+        let cases = [
+            ("connect", "HTTP-CONNECT"),
+            ("get", "HTTP-GET"),
+            ("post", "HTTP-POST"),
+            ("put", "HTTP-PUT"),
+            ("delete", "HTTP-DELETE"),
+            ("patch", "HTTP-PATCH"),
+        ];
+        for (method, expected) in cases {
+            let cli = parse(&["knockknock", "http", method, "localhost:8888/haha"]);
+            let (proto, target) = resolve_protocol(&cli.command);
+            assert_eq!(proto, expected, "method: {}", method);
+            assert_eq!(target, "localhost:8888/haha");
+        }
+    }
+
+    #[test]
+    fn count_default_is_3() {
+        let cli = parse(&["knockknock", "tcp", "localhost:8000"]);
+        assert_eq!(cli.count, 3);
+    }
+
+    #[test]
+    fn count_at_root_position() {
+        let cli = parse(&["knockknock", "-c", "5", "tcp", "localhost:8000"]);
+        assert_eq!(cli.count, 5);
+    }
+
+    #[test]
+    fn count_at_subcommand_leaf() {
+        let cli = parse(&["knockknock", "tcp", "localhost:8000", "-c", "5"]);
+        assert_eq!(cli.count, 5);
+    }
+
+    #[test]
+    fn count_at_http_method_leaf() {
+        let cli = parse(&["knockknock", "http", "get", "localhost:8888/haha", "-c", "7"]);
+        assert_eq!(cli.count, 7);
+    }
+
+    #[test]
+    fn rejects_missing_subcommand() {
+        let result = Cli::try_parse_from(["knockknock"]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn rejects_unknown_http_method() {
+        let result = Cli::try_parse_from(["knockknock", "http", "trace", "localhost:8888"]);
+        assert!(result.is_err());
+    }
+}

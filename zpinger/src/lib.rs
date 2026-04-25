@@ -9,12 +9,14 @@ mod test_pinger;
 
 mod http;
 mod level4;
+mod pinger;
 pub mod uri;
 
 pub use crate::http::{
     httping_connect, httping_delete, httping_get, httping_patch, httping_post, httping_put,
 };
 pub use crate::level4::{tcping, udping};
+pub use crate::pinger::{timed, Pinger};
 
 pub(crate) const BUF_SIZE: usize = 0xFF;
 pub(crate) const HTTP_UNCONNECT_STATUS_CODE: &'static [&'static str] = &["404", "501"];
@@ -33,14 +35,14 @@ pub fn resolve(url: &str) -> Vec<SocketAddr> {
         .collect()
 }
 
-type Pinger = fn(&str) -> Result<()>;
+type PingerFn = fn(&str) -> Result<()>;
 
 pub struct PingHandler {
-    pub protocol_map: HashMap<String, Pinger>,
+    pub protocol_map: HashMap<String, PingerFn>,
 }
 
 impl PingHandler {
-    pub fn add_pinger(&mut self, protocol: String, func: Pinger) {
+    pub fn add_pinger(&mut self, protocol: String, func: PingerFn) {
         self.protocol_map.insert(protocol, func);
     }
 

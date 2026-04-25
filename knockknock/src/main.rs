@@ -1,9 +1,42 @@
-use clap;
+use clap::{Parser, Subcommand};
 use colored::*;
 use std::collections::HashMap;
 use std::io::Result;
 use std::time::Duration;
-use zpinger;
+
+#[derive(Parser)]
+#[command(name = "knockknock", version, about = "CLI tool for ping protocols")]
+struct Cli {
+    #[command(subcommand)]
+    command: Command,
+
+    /// ping times
+    #[arg(short, long, default_value_t = 3, global = true)]
+    count: u64,
+}
+
+#[derive(Subcommand)]
+enum Command {
+    /// TCP ping
+    Tcp { target: String },
+    /// UDP ping
+    Udp { target: String },
+    /// HTTP ping
+    Http {
+        #[command(subcommand)]
+        method: HttpMethod,
+    },
+}
+
+#[derive(Subcommand)]
+enum HttpMethod {
+    Connect { target: String },
+    Get { target: String },
+    Post { target: String },
+    Put { target: String },
+    Delete { target: String },
+    Patch { target: String },
+}
 
 fn display_ping_info(target: &str, elapsed_time: Duration) {
     let console_str = format!(
@@ -40,8 +73,26 @@ fn display_statistic(total_time: Duration, count: u64, recv_count: u64, lose_cou
     );
 }
 
+fn resolve_protocol(command: &Command) -> (&'static str, &str) {
+    match command {
+        Command::Tcp { target } => ("TCP", target.as_str()),
+        Command::Udp { target } => ("UDP", target.as_str()),
+        Command::Http { method } => match method {
+            HttpMethod::Connect { target } => ("HTTP-CONNECT", target.as_str()),
+            HttpMethod::Get { target } => ("HTTP-GET", target.as_str()),
+            HttpMethod::Post { target } => ("HTTP-POST", target.as_str()),
+            HttpMethod::Put { target } => ("HTTP-PUT", target.as_str()),
+            HttpMethod::Delete { target } => ("HTTP-DELETE", target.as_str()),
+            HttpMethod::Patch { target } => ("HTTP-PATCH", target.as_str()),
+        },
+    }
+}
+
 fn main() -> Result<()> {
-    // init function map
+    let cli = Cli::parse();
+    let (protocol, target) = resolve_protocol(&cli.command);
+    let count = cli.count;
+
     let mut ping_handler = zpinger::PingHandler {
         protocol_map: HashMap::new(),
     };
@@ -54,23 +105,9 @@ fn main() -> Result<()> {
     ping_handler.add_pinger(String::from("HTTP-DELETE"), zpinger::httping_delete);
     ping_handler.add_pinger(String::from("HTTP-PATCH"), zpinger::httping_patch);
 
-    // load cli config
-    let yaml = clap::load_yaml!("cli.yaml");
-    let args = clap::App::from_yaml(yaml).get_matches();
-
-    // parse args
-    let target = args.value_of("Domain").unwrap();
-    let protocol = args.value_of("Protocol").unwrap();
-    let count = args
-        .value_of("Count")
-        .and_then(|s| s.parse::<u64>().ok())
-        .unwrap();
-
-    // DNS resolve
     let server = zpinger::resolve(target);
     println!("DNS lookup: {:?}", server);
 
-    // ping
     let mut total_time = Duration::new(0, 0);
     let mut lose_count: u64 = 0;
     for _ in 0..count {
@@ -86,7 +123,86 @@ fn main() -> Result<()> {
         };
     }
 
-    // statistic
     display_statistic(total_time, count, count - lose_count, lose_count);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse(args: &[&str]) -> Cli {
+        Cli::try_parse_from(args).expect("CLI should parse")
+    }
+
+    #[test]
+    fn parses_tcp() {
+        let cli = parse(&["knockknock", "tcp", "localhost:8000", "-c", "3"]);
+        let (proto, target) = resolve_protocol(&cli.command);
+        assert_eq!(proto, "TCP");
+        assert_eq!(target, "localhost:8000");
+        assert_eq!(cli.count, 3);
+    }
+
+    #[test]
+    fn parses_udp() {
+        let cli = parse(&["knockknock", "udp", "localhost:12000"]);
+        let (proto, target) = resolve_protocol(&cli.command);
+        assert_eq!(proto, "UDP");
+        assert_eq!(target, "localhost:12000");
+    }
+
+    #[test]
+    fn parses_all_http_methods() {
+        let cases = [
+            ("connect", "HTTP-CONNECT"),
+            ("get", "HTTP-GET"),
+            ("post", "HTTP-POST"),
+            ("put", "HTTP-PUT"),
+            ("delete", "HTTP-DELETE"),
+            ("patch", "HTTP-PATCH"),
+        ];
+        for (method, expected) in cases {
+            let cli = parse(&["knockknock", "http", method, "localhost:8888/haha"]);
+            let (proto, target) = resolve_protocol(&cli.command);
+            assert_eq!(proto, expected, "method: {}", method);
+            assert_eq!(target, "localhost:8888/haha");
+        }
+    }
+
+    #[test]
+    fn count_default_is_3() {
+        let cli = parse(&["knockknock", "tcp", "localhost:8000"]);
+        assert_eq!(cli.count, 3);
+    }
+
+    #[test]
+    fn count_at_root_position() {
+        let cli = parse(&["knockknock", "-c", "5", "tcp", "localhost:8000"]);
+        assert_eq!(cli.count, 5);
+    }
+
+    #[test]
+    fn count_at_subcommand_leaf() {
+        let cli = parse(&["knockknock", "tcp", "localhost:8000", "-c", "5"]);
+        assert_eq!(cli.count, 5);
+    }
+
+    #[test]
+    fn count_at_http_method_leaf() {
+        let cli = parse(&["knockknock", "http", "get", "localhost:8888/haha", "-c", "7"]);
+        assert_eq!(cli.count, 7);
+    }
+
+    #[test]
+    fn rejects_missing_subcommand() {
+        let result = Cli::try_parse_from(["knockknock"]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn rejects_unknown_http_method() {
+        let result = Cli::try_parse_from(["knockknock", "http", "trace", "localhost:8888"]);
+        assert!(result.is_err());
+    }
 }

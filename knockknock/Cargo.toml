@@ -11,6 +11,6 @@ license = "MIT"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-zpinger = "0.1.0"
-clap = { version = "=3.0.0-beta.5", features = ["yaml"] }
+zpinger = { path = "../zpinger", version = "0.1.0" }
+clap = { version = "4", features = ["derive"] }
 colored = "2"

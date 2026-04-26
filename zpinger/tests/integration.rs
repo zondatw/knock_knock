@@ -186,3 +186,60 @@ fn http_pinger_rejects_non_http_response() {
     let p = zpinger::HttpPinger::new(zpinger::HttpMethod::Get, format!("{}/x", addr));
     assert!(p.ping().is_err());
 }
+
+#[test]
+fn ws_pinger_succeeds_on_ws_server() {
+    let addr = testserver::start_ws_ok("127.0.0.1:0").unwrap();
+    let target = format!("ws://{addr}/");
+    zpinger::WebSocketPinger::new(target).ping().unwrap();
+}
+
+#[test]
+fn ws_pinger_via_timed_helper() {
+    let addr = testserver::start_ws_ok("127.0.0.1:0").unwrap();
+    let target = format!("ws://{addr}/");
+    let p = zpinger::WebSocketPinger::new(target);
+    let elapsed = zpinger::timed(&p).unwrap();
+    assert!(elapsed > Duration::from_nanos(0));
+}
+
+#[test]
+fn ws_pinger_fails_on_closed_port() {
+    let target = format!("ws://{}/", closed_tcp_addr());
+    let p = zpinger::WebSocketPinger::new(target);
+    assert!(p.ping().is_err());
+}
+
+#[test]
+fn ws_pinger_rejects_non_ws_scheme() {
+    let p = zpinger::WebSocketPinger::new("http://example.com:80/");
+    let err = p.ping().expect_err("non-ws scheme must be rejected");
+    let msg = err.to_string();
+    assert!(msg.contains("http"), "unexpected error message: {msg}");
+}
+
+#[test]
+fn wss_pinger_succeeds_with_trusted_cert() {
+    let server = testserver::start_wss_ok("127.0.0.1:0").unwrap();
+    let target = format!("wss://localhost:{}/", server.addr.port());
+    let p = zpinger::WebSocketPinger::new(target).with_tls_config(server.client_config);
+    p.ping().unwrap();
+}
+
+#[test]
+fn wss_pinger_fails_without_trust_anchor() {
+    // Without the test server's cert installed as a trust anchor, the
+    // TLS handshake must fail rather than silently succeed.
+    let server = testserver::start_wss_ok("127.0.0.1:0").unwrap();
+    let target = format!("wss://localhost:{}/", server.addr.port());
+    let p = zpinger::WebSocketPinger::new(target);
+    assert!(p.ping().is_err());
+}
+
+#[test]
+fn ws_pinger_usable_as_trait_object() {
+    let addr = testserver::start_ws_ok("127.0.0.1:0").unwrap();
+    let target = format!("ws://{addr}/");
+    let p: Box<dyn Pinger> = Box::new(zpinger::WebSocketPinger::new(target));
+    p.ping().unwrap();
+}

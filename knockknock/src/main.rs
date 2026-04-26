@@ -2,7 +2,7 @@ use clap::{Parser, Subcommand};
 use colored::*;
 use std::io::Result;
 use std::time::Duration;
-use zpinger::{HttpPinger, Pinger, TcpPinger, UdpPinger};
+use zpinger::{HttpPinger, Pinger, TcpPinger, UdpPinger, WebSocketPinger};
 
 #[derive(Parser)]
 #[command(name = "knockknock", version, about = "CLI tool for ping protocols")]
@@ -26,6 +26,9 @@ enum Command {
         #[command(subcommand)]
         method: HttpMethod,
     },
+    /// WebSocket ping (ws:// or wss://) — runs full upgrade handshake
+    /// plus a control PING/PONG round trip.
+    Ws { target: String },
 }
 
 #[derive(Subcommand)]
@@ -77,6 +80,7 @@ fn target_of(command: &Command) -> &str {
     match command {
         Command::Tcp { target } => target,
         Command::Udp { target } => target,
+        Command::Ws { target } => target,
         Command::Http { method } => match method {
             HttpMethod::Connect { target }
             | HttpMethod::Get { target }
@@ -92,6 +96,7 @@ fn build_pinger(command: &Command) -> Box<dyn Pinger> {
     match command {
         Command::Tcp { target } => Box::new(TcpPinger::new(target.clone())),
         Command::Udp { target } => Box::new(UdpPinger::new(target.clone())),
+        Command::Ws { target } => Box::new(WebSocketPinger::new(target.clone())),
         Command::Http { method } => {
             let (m, target) = match method {
                 HttpMethod::Connect { target } => (zpinger::HttpMethod::Connect, target),
@@ -237,10 +242,19 @@ mod tests {
             &["knockknock", "http", "put", "localhost:1"],
             &["knockknock", "http", "delete", "localhost:1"],
             &["knockknock", "http", "patch", "localhost:1"],
+            &["knockknock", "ws", "ws://localhost:1"],
+            &["knockknock", "ws", "wss://localhost:1"],
         ];
         for args in cases {
             let cli = parse(args);
             let _: Box<dyn Pinger> = build_pinger(&cli.command);
         }
+    }
+
+    #[test]
+    fn parses_ws_subcommand() {
+        let cli = parse(&["knockknock", "ws", "ws://localhost:18000/echo"]);
+        assert!(matches!(cli.command, Command::Ws { .. }));
+        assert_eq!(target_of(&cli.command), "ws://localhost:18000/echo");
     }
 }

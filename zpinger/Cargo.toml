@@ -12,6 +12,7 @@ license = "MIT"
 regex = "1.1.9"
 rustls = { version = "0.23", default-features = false, features = ["std", "ring", "tls12", "logging"] }
 rustls-pki-types = "1"
+tungstenite = { version = "0.24", default-features = false, features = ["handshake"] }
 webpki-roots = "0.26"
 
 [dev-dependencies]

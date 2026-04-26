@@ -9,11 +9,13 @@ mod level4;
 mod pinger;
 mod tls;
 pub mod uri;
+mod websocket;
 
 pub use crate::http::{HttpMethod, HttpPinger};
 pub use crate::level4::{TcpPinger, UdpPinger};
 pub use crate::pinger::{timed, Pinger};
 pub use crate::tls::default_client_config;
+pub use crate::websocket::WebSocketPinger;
 pub use rustls::ClientConfig;
 
 pub(crate) const BUF_SIZE: usize = 0xFF;

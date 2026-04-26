@@ -6,7 +6,7 @@ use std::thread;
 #[derive(Parser)]
 #[command(
     name = "testserver",
-    about = "Local TCP / UDP / HTTP servers for exercising knockknock"
+    about = "Local TCP / UDP / HTTP / WebSocket servers for exercising knockknock"
 )]
 struct Args {
     /// TCP echo port (use 0 for an OS-picked ephemeral port)
@@ -20,6 +20,10 @@ struct Args {
     /// HTTP 200-OK port (use 0 for an OS-picked ephemeral port)
     #[arg(long, default_value_t = 18002)]
     http: u16,
+
+    /// WebSocket (ws://) PING-replier port (use 0 for ephemeral)
+    #[arg(long, default_value_t = 18003)]
+    ws: u16,
 
     /// Bind address (default 0.0.0.0; use 127.0.0.1 for loopback only)
     #[arg(long, default_value = "0.0.0.0")]
@@ -52,15 +56,20 @@ fn main() {
     let http = start_or_die("http", args.http, || {
         testserver::start_http_ok(format!("{bind}:{}", args.http))
     });
+    let ws = start_or_die("ws", args.ws, || {
+        testserver::start_ws_ok(format!("{bind}:{}", args.ws))
+    });
 
     println!("[tcp]  listening on {tcp}");
     println!("[udp]  listening on {udp}");
     println!("[http] listening on {http}");
+    println!("[ws]   listening on {ws}");
     println!();
     println!("Try in another terminal:");
     println!("  knockknock tcp localhost:{}", tcp.port());
     println!("  knockknock udp localhost:{}", udp.port());
     println!("  knockknock http get localhost:{}/anything", http.port());
+    println!("  knockknock ws ws://localhost:{}/", ws.port());
     println!();
     println!("Press Ctrl+C to stop.");
 

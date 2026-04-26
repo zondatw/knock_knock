@@ -13,6 +13,35 @@ $ cargo build --release
 $ cargo test
 ```
 
+## Local test server
+
+A small companion binary `testserver` provides TCP echo, UDP echo, and a
+minimal HTTP 200-OK responder so you can exercise every pinger end-to-end
+without depending on external services.
+
+```shell
+$ cargo run -p testserver
+[tcp]  listening on 0.0.0.0:18000
+[udp]  listening on 0.0.0.0:18001
+[http] listening on 0.0.0.0:18002
+
+Try in another terminal:
+  knockknock tcp localhost:18000
+  knockknock udp localhost:18001
+  knockknock http get localhost:18002/anything
+```
+
+If the default ports are taken, override them (use `0` for an OS-picked
+ephemeral port, or pass any specific number):
+
+```shell
+$ cargo run -p testserver -- --tcp 0 --udp 0 --http 0 --bind 127.0.0.1
+```
+
+The same servers are used by `zpinger`'s integration tests, so
+`cargo test` already exercises every protocol against a real socket
+without any manual setup.
+
 ## Execution
 
 ```shell

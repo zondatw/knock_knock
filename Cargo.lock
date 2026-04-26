@@ -236,6 +236,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "testserver"
+version = "0.1.0"
+dependencies = [
+ "clap",
+]
+
+[[package]]
 name = "unicode-ident"
 version = "1.0.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -289,4 +296,5 @@ name = "zpinger"
 version = "0.1.0"
 dependencies = [
  "regex",
+ "testserver",
 ]

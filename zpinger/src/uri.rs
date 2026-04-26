@@ -14,8 +14,8 @@ pub struct URI {
     pub fragment: String,
 }
 
-impl URI {
-    pub fn default() -> URI {
+impl Default for URI {
+    fn default() -> URI {
         URI {
             scheme: String::from(""),
             username: String::from(""),
@@ -28,7 +28,9 @@ impl URI {
             fragment: String::from(""),
         }
     }
+}
 
+impl URI {
     pub fn parse(&mut self, url: &str) -> Result<()> {
         let rg_w_named = Regex::new(r"^((?P<scheme>[^/?#]+)://)?((?P<username>\w+):(?P<password>\w+)@)?(?P<host>(?P<domain>[^/?#]*)(:(?P<port>\d*)))?(?P<path>[^?#]*)(\?(?P<query>[^#]*))?(#(?P<fragment>.*))?").unwrap();
         match rg_w_named.captures(url) {
@@ -77,17 +79,17 @@ impl URI {
 
     pub fn get_url(&mut self) -> String {
         let mut url = format!("{}://", self.scheme);
-        if self.username != "" || self.password != "" {
+        if !self.username.is_empty() || !self.password.is_empty() {
             url = format!("{}{}:{}@", url, self.username, self.password);
         }
         url = format!("{}{}", url, self.host);
-        if self.path != "" {
+        if !self.path.is_empty() {
             url = format!("{}{}", url, self.path);
         }
-        if self.query != "" {
+        if !self.query.is_empty() {
             url = format!("{}?{}", url, self.query);
         }
-        if self.fragment != "" {
+        if !self.fragment.is_empty() {
             url = format!("{}#{}", url, self.fragment);
         }
         url

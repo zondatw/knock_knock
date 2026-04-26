@@ -13,8 +13,8 @@ pub fn tcping(target: &str) -> Result<()> {
     stream.set_read_timeout(Some(Duration::new(5, 0)))?;
     stream.set_write_timeout(Some(Duration::new(5, 0)))?;
 
-    stream.write(&[1])?;
-    stream.read(&mut buffer)?;
+    stream.write_all(&[1])?;
+    let _ = stream.read(&mut buffer)?;
     Ok(())
 }
 
@@ -27,7 +27,7 @@ pub fn udping(target: &str) -> Result<()> {
     socket.set_read_timeout(Some(Duration::new(5, 0)))?;
     socket.set_write_timeout(Some(Duration::new(5, 0)))?;
 
-    socket.send(&[1])?;
-    socket.recv_from(&mut buffer)?;
+    let _ = socket.send(&[1])?;
+    let _ = socket.recv_from(&mut buffer)?;
     Ok(())
 }

@@ -14,17 +14,13 @@ pub mod uri;
 
 pub use crate::http::{
     httping_connect, httping_delete, httping_get, httping_patch, httping_post, httping_put,
+    HttpMethod, HttpPinger,
 };
 pub use crate::level4::{tcping, udping, TcpPinger, UdpPinger};
 pub use crate::pinger::{timed, Pinger};
 
 pub(crate) const BUF_SIZE: usize = 0xFF;
 pub(crate) const HTTP_UNCONNECT_STATUS_CODE: &[&str] = &["404", "501"];
-
-pub(crate) fn get_host_path(url: &str) -> String {
-    let uri = uri::get_uri(url);
-    uri.host
-}
 
 pub fn resolve(url: &str) -> Vec<SocketAddr> {
     let uri = uri::get_uri(url);

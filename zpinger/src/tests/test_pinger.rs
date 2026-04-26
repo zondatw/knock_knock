@@ -7,7 +7,7 @@ fn testping(_target: &str) -> Result<()> {
 }
 
 fn testping_error(_target: &str) -> Result<()> {
-    Result::Err(Error::new(ErrorKind::Other, "Test fail"))
+    Result::Err(Error::other("Test fail"))
 }
 
 #[test]
@@ -67,7 +67,7 @@ impl Pinger for OkPinger {
 struct ErrPinger;
 impl Pinger for ErrPinger {
     fn ping(&self) -> Result<()> {
-        Err(Error::new(ErrorKind::Other, "Test fail"))
+        Err(Error::other("Test fail"))
     }
 }
 

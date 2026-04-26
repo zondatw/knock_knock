@@ -13,6 +13,34 @@ $ cargo build --release
 $ cargo test
 ```
 
+## Development setup
+
+Quality gate is enforced via [pre-commit](https://pre-commit.com) hooks
+locally and the same checks run on every push / PR via GitHub Actions
+([.github/workflows/ci.yml](.github/workflows/ci.yml)).
+
+```shell
+# one-time install
+$ pip install pre-commit          # or: brew install pre-commit
+$ pre-commit install               # installs the pre-commit git hook
+$ pre-commit install --hook-type pre-push  # installs the pre-push hook (runs tests)
+
+# run all hooks against the entire repo (e.g. after pulling fresh changes)
+$ pre-commit run --all-files
+```
+
+Hooks enforced (configured in [.pre-commit-config.yaml](.pre-commit-config.yaml)):
+
+| Stage      | Hook                                                  |
+| ---------- | ----------------------------------------------------- |
+| pre-commit | trailing whitespace, EOF newline, YAML/TOML lint, merge-conflict / large-file guard, line-ending normalization |
+| pre-commit | `cargo fmt --all -- --check`                          |
+| pre-commit | `cargo clippy --workspace --all-targets -- -D warnings` |
+| pre-push   | `cargo test --workspace`                              |
+
+Clippy is configured to deny all warnings, so any new lint becomes a
+build failure both locally and in CI.
+
 ## Local test server
 
 A small companion binary `testserver` provides TCP echo, UDP echo, and a

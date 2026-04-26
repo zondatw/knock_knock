@@ -190,7 +190,14 @@ mod tests {
 
     #[test]
     fn count_at_http_method_leaf() {
-        let cli = parse(&["knockknock", "http", "get", "localhost:8888/haha", "-c", "7"]);
+        let cli = parse(&[
+            "knockknock",
+            "http",
+            "get",
+            "localhost:8888/haha",
+            "-c",
+            "7",
+        ]);
         assert_eq!(cli.count, 7);
     }
 

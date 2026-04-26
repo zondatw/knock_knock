@@ -19,7 +19,7 @@ pub use crate::level4::{tcping, udping};
 pub use crate::pinger::{timed, Pinger};
 
 pub(crate) const BUF_SIZE: usize = 0xFF;
-pub(crate) const HTTP_UNCONNECT_STATUS_CODE: &'static [&'static str] = &["404", "501"];
+pub(crate) const HTTP_UNCONNECT_STATUS_CODE: &[&str] = &["404", "501"];
 
 pub(crate) fn get_host_path(url: &str) -> String {
     let uri = uri::get_uri(url);

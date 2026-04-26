@@ -16,8 +16,8 @@ fn httping(target: &str, body: String) -> Result<()> {
     stream.set_read_timeout(Some(Duration::new(5, 0)))?;
     stream.set_write_timeout(Some(Duration::new(5, 0)))?;
 
-    stream.write(body.as_bytes())?;
-    stream.read(&mut buffer)?;
+    stream.write_all(body.as_bytes())?;
+    let _ = stream.read(&mut buffer)?;
 
     let buffer_str = String::from_utf8_lossy(&buffer);
     let header: Vec<&str> = buffer_str.split("\r\n").collect();

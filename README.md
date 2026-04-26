@@ -84,6 +84,15 @@ Options:
   -c, --count <COUNT>  ping times [default: 3]
 ```
 
+`http` accepts both `http://` and `https://` targets — TLS handshakes
+are handled by [`rustls`](https://github.com/rustls/rustls) with the
+Mozilla root CA bundle from `webpki-roots`, no system trust store
+required:
+
+```shell
+$ knockknock http get https://example.com:443/
+```
+
 ### Ping TCP path
 
 ```shell

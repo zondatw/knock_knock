@@ -78,17 +78,3 @@ impl Pinger for UdpPinger {
         Ok(())
     }
 }
-
-/// Function-style entry point for backward compatibility with the
-/// `PingHandler` HashMap dispatch. Will be removed in a later PR once
-/// the dispatcher migrates to trait objects.
-pub fn tcping(target: &str) -> Result<()> {
-    TcpPinger::new(target).ping()
-}
-
-/// Function-style entry point for backward compatibility with the
-/// `PingHandler` HashMap dispatch. Will be removed in a later PR once
-/// the dispatcher migrates to trait objects.
-pub fn udping(target: &str) -> Result<()> {
-    UdpPinger::new(target).ping()
-}

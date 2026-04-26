@@ -1,7 +1,4 @@
-use std::collections::HashMap;
-use std::io::Result;
 use std::net::{SocketAddr, ToSocketAddrs};
-use std::time::{Duration, Instant};
 
 #[path = "tests/test_pinger.rs"]
 #[cfg(test)]
@@ -12,45 +9,22 @@ mod level4;
 mod pinger;
 pub mod uri;
 
-pub use crate::http::{
-    httping_connect, httping_delete, httping_get, httping_patch, httping_post, httping_put,
-    HttpMethod, HttpPinger,
-};
-pub use crate::level4::{tcping, udping, TcpPinger, UdpPinger};
+pub use crate::http::{HttpMethod, HttpPinger};
+pub use crate::level4::{TcpPinger, UdpPinger};
 pub use crate::pinger::{timed, Pinger};
 
 pub(crate) const BUF_SIZE: usize = 0xFF;
 pub(crate) const HTTP_UNCONNECT_STATUS_CODE: &[&str] = &["404", "501"];
 
+/// Resolve `url`'s host:port to a list of socket addresses for display.
+/// Returns an empty Vec if DNS lookup fails or the host is empty —
+/// callers (the CLI in particular) treat the result as informational
+/// and let the actual pinger surface the real error.
 pub fn resolve(url: &str) -> Vec<SocketAddr> {
     let uri = uri::get_uri(url);
     uri.host
         .as_str()
         .to_socket_addrs()
-        .expect("Unable to resolve domain")
-        .collect()
-}
-
-type PingerFn = fn(&str) -> Result<()>;
-
-pub struct PingHandler {
-    pub protocol_map: HashMap<String, PingerFn>,
-}
-
-impl PingHandler {
-    pub fn add_pinger(&mut self, protocol: String, func: PingerFn) {
-        self.protocol_map.insert(protocol, func);
-    }
-
-    pub fn ping(&mut self, protocol: &str, target: &str) -> Result<Duration> {
-        let start_time = Instant::now();
-
-        match self.protocol_map[protocol](target) {
-            Ok(_) => (),
-            Err(err) => return Err(err),
-        };
-
-        let elapsed_time = start_time.elapsed();
-        Ok(elapsed_time)
-    }
+        .map(|it| it.collect())
+        .unwrap_or_default()
 }

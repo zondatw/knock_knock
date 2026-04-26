@@ -135,33 +135,3 @@ impl Pinger for HttpPinger {
         Ok(())
     }
 }
-
-// -- Backward-compat free functions ----------------------------------
-//
-// Kept so the existing PingHandler HashMap<String, fn(&str) -> Result>
-// dispatch continues to work without changes. A later PR will drop
-// these once the dispatcher migrates to trait objects.
-
-pub fn httping_connect(target: &str) -> Result<()> {
-    HttpPinger::new(HttpMethod::Connect, target).ping()
-}
-
-pub fn httping_get(target: &str) -> Result<()> {
-    HttpPinger::new(HttpMethod::Get, target).ping()
-}
-
-pub fn httping_post(target: &str) -> Result<()> {
-    HttpPinger::new(HttpMethod::Post, target).ping()
-}
-
-pub fn httping_put(target: &str) -> Result<()> {
-    HttpPinger::new(HttpMethod::Put, target).ping()
-}
-
-pub fn httping_delete(target: &str) -> Result<()> {
-    HttpPinger::new(HttpMethod::Delete, target).ping()
-}
-
-pub fn httping_patch(target: &str) -> Result<()> {
-    HttpPinger::new(HttpMethod::Patch, target).ping()
-}

@@ -1,4 +1,7 @@
 use std::net::TcpListener;
+use std::time::Duration;
+
+use zpinger::Pinger;
 
 fn closed_tcp_addr() -> String {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
@@ -47,4 +50,50 @@ fn resolve_returns_at_least_one_address() {
     let addr = testserver::start_tcp_echo("127.0.0.1:0").unwrap();
     let resolved = zpinger::resolve(&addr.to_string());
     assert!(!resolved.is_empty());
+}
+
+#[test]
+fn tcp_pinger_struct_succeeds() {
+    let addr = testserver::start_tcp_echo("127.0.0.1:0").unwrap();
+    zpinger::TcpPinger::new(addr.to_string()).ping().unwrap();
+}
+
+#[test]
+fn tcp_pinger_via_timed_helper() {
+    let addr = testserver::start_tcp_echo("127.0.0.1:0").unwrap();
+    let p = zpinger::TcpPinger::new(addr.to_string());
+    let elapsed = zpinger::timed(&p).unwrap();
+    assert!(elapsed > Duration::from_nanos(0));
+}
+
+#[test]
+fn tcp_pinger_with_custom_timeout() {
+    let addr = testserver::start_tcp_echo("127.0.0.1:0").unwrap();
+    let p = zpinger::TcpPinger::new(addr.to_string()).with_timeout(Duration::from_secs(1));
+    p.ping().unwrap();
+}
+
+#[test]
+fn udp_pinger_struct_succeeds() {
+    let addr = testserver::start_udp_echo("127.0.0.1:0").unwrap();
+    zpinger::UdpPinger::new(addr.to_string()).ping().unwrap();
+}
+
+#[test]
+fn level4_pingers_usable_as_trait_objects() {
+    let tcp_addr = testserver::start_tcp_echo("127.0.0.1:0").unwrap();
+    let udp_addr = testserver::start_udp_echo("127.0.0.1:0").unwrap();
+    let pingers: Vec<Box<dyn Pinger>> = vec![
+        Box::new(zpinger::TcpPinger::new(tcp_addr.to_string())),
+        Box::new(zpinger::UdpPinger::new(udp_addr.to_string())),
+    ];
+    for p in &pingers {
+        p.ping().unwrap();
+    }
+}
+
+#[test]
+fn tcp_pinger_struct_fails_on_closed_port() {
+    let p = zpinger::TcpPinger::new(closed_tcp_addr());
+    assert!(p.ping().is_err());
 }

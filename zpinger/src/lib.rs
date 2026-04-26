@@ -15,7 +15,7 @@ pub mod uri;
 pub use crate::http::{
     httping_connect, httping_delete, httping_get, httping_patch, httping_post, httping_put,
 };
-pub use crate::level4::{tcping, udping};
+pub use crate::level4::{tcping, udping, TcpPinger, UdpPinger};
 pub use crate::pinger::{timed, Pinger};
 
 pub(crate) const BUF_SIZE: usize = 0xFF;

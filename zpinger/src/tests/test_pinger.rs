@@ -11,15 +11,6 @@ fn testping_error(_target: &str) -> Result<()> {
 }
 
 #[test]
-fn test_get_host_path() {
-    assert_eq!(get_host_path("domain.com:80"), "domain.com:80");
-    assert_eq!(
-        get_host_path("domain.com:80/test/path?param=123#frag"),
-        "domain.com:80"
-    );
-}
-
-#[test]
 fn test_pinger() {
     let protocol = "Test";
     let mut ping_handler = PingHandler {

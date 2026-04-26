@@ -74,39 +74,40 @@ impl HttpPinger {
         self
     }
 
-    fn build_request(&self, uri: &URI) -> String {
+    fn build_request(&self, uri: &URI, host_header: &str) -> String {
         let method = self.method.as_str();
+        let path = if uri.path.is_empty() { "/" } else { &uri.path };
         if self.method.has_body() {
             format!(
-                "{method} {} HTTP/1.1\r\n\
-                 Host: {}\r\n\
+                "{method} {path} HTTP/1.1\r\n\
+                 Host: {host_header}\r\n\
                  User-Agent: Knock Knock\r\n\
                  Content-Type: application/json\r\n\
                  Content-Length: 2\r\n\
                  \r\n\
                  {{}}\r\n\
                  \r\n",
-                uri.path, uri.host,
             )
         } else {
             format!(
-                "{method} {} HTTP/1.1\r\n\
-                 Host: {}\r\n\
+                "{method} {path} HTTP/1.1\r\n\
+                 Host: {host_header}\r\n\
                  User-Agent: Knock Knock\r\n\
                  \r\n",
-                uri.path, uri.host,
             )
         }
     }
 
     fn ping_plain(&self, uri: &URI) -> Result<()> {
-        let mut stream = TcpStream::connect(uri.host.as_str())?;
+        let endpoint = endpoint_for(uri, 80)?;
+        let mut stream = TcpStream::connect(&endpoint)?;
         stream.set_read_timeout(Some(self.timeout))?;
         stream.set_write_timeout(Some(self.timeout))?;
-        run_exchange(&mut stream, &self.build_request(uri))
+        run_exchange(&mut stream, &self.build_request(uri, &endpoint))
     }
 
     fn ping_tls(&self, uri: &URI) -> Result<()> {
+        let endpoint = endpoint_for(uri, 443)?;
         let server_name = ServerName::try_from(uri.domain.clone())
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
 
@@ -116,12 +117,30 @@ impl HttpPinger {
             .unwrap_or_else(default_client_config);
 
         let conn = ClientConnection::new(config, server_name).map_err(io::Error::other)?;
-        let tcp = TcpStream::connect(uri.host.as_str())?;
+        let tcp = TcpStream::connect(&endpoint)?;
         tcp.set_read_timeout(Some(self.timeout))?;
         tcp.set_write_timeout(Some(self.timeout))?;
         let mut stream = StreamOwned::new(conn, tcp);
-        run_exchange(&mut stream, &self.build_request(uri))
+        run_exchange(&mut stream, &self.build_request(uri, &endpoint))
     }
+}
+
+/// Build a `host:port` string for a URI, falling back to
+/// `default_port` when the user didn't specify one (80 for http,
+/// 443 for https).
+fn endpoint_for(uri: &URI, default_port: u16) -> Result<String> {
+    if uri.domain.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "missing host in target URL",
+        ));
+    }
+    let port = if uri.port > 0 {
+        uri.port as u16
+    } else {
+        default_port
+    };
+    Ok(format!("{}:{}", uri.domain, port))
 }
 
 impl Pinger for HttpPinger {

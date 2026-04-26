@@ -32,7 +32,7 @@ impl Default for URI {
 
 impl URI {
     pub fn parse(&mut self, url: &str) -> Result<()> {
-        let rg_w_named = Regex::new(r"^((?P<scheme>[^/?#]+)://)?((?P<username>\w+):(?P<password>\w+)@)?(?P<host>(?P<domain>[^/?#]*)(:(?P<port>\d*)))?(?P<path>[^?#]*)(\?(?P<query>[^#]*))?(#(?P<fragment>.*))?").unwrap();
+        let rg_w_named = Regex::new(r"^((?P<scheme>[^/?#]+)://)?((?P<username>\w+):(?P<password>\w+)@)?(?P<host>(?P<domain>[^/?#:]+)(:(?P<port>\d*))?)?(?P<path>[^?#]*)(\?(?P<query>[^#]*))?(#(?P<fragment>.*))?").unwrap();
         match rg_w_named.captures(url) {
             Some(uri_parser) => {
                 match uri_parser.name("scheme") {
@@ -150,6 +150,14 @@ impl URI {
 /// assert_eq!(uri_obj.query, String::from(""));
 /// assert_eq!(uri_obj.fragment, String::from(""));
 /// assert_eq!(uri_obj.get_url(), String::from(url));
+///
+/// // No-port URL — common for HTTPS where 443 is implicit.
+/// let uri_obj = zpinger::uri::get_uri("https://www.google.com");
+/// assert_eq!(uri_obj.scheme, String::from("https"));
+/// assert_eq!(uri_obj.host, String::from("www.google.com"));
+/// assert_eq!(uri_obj.domain, String::from("www.google.com"));
+/// assert_eq!(uri_obj.port, 0);
+/// assert_eq!(uri_obj.path, String::from(""));
 /// ```
 pub fn get_uri(url: &str) -> URI {
     let mut uri = URI::default();

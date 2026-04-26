@@ -1,4 +1,5 @@
 use std::net::TcpListener;
+use std::sync::Arc;
 use std::time::Duration;
 
 use zpinger::Pinger;
@@ -105,13 +106,52 @@ fn http_pinger_via_timed_helper() {
 }
 
 #[test]
-fn http_pinger_rejects_https_scheme() {
-    // No real connection should be attempted; the pinger should refuse
-    // up front based on the scheme.
-    let p = zpinger::HttpPinger::new(zpinger::HttpMethod::Get, "https://example.com:443/foo");
-    let err = p.ping().expect_err("https must be rejected");
+fn http_pinger_rejects_unknown_scheme() {
+    // Anything that isn't http or https should be refused up front.
+    let p = zpinger::HttpPinger::new(zpinger::HttpMethod::Get, "ftp://example.com:21/foo");
+    let err = p.ping().expect_err("non-http scheme must be rejected");
     let msg = err.to_string();
-    assert!(msg.contains("https"), "unexpected error message: {msg}");
+    assert!(msg.contains("ftp"), "unexpected error message: {msg}");
+}
+
+#[test]
+fn http_pinger_https_succeeds_with_trusted_cert() {
+    let server = testserver::start_https_ok("127.0.0.1:0").unwrap();
+    let target = format!("https://localhost:{}/anything", server.addr.port());
+    let p = zpinger::HttpPinger::new(zpinger::HttpMethod::Get, target)
+        .with_tls_config(server.client_config);
+    p.ping().unwrap();
+}
+
+#[test]
+fn http_pinger_https_all_methods_via_struct() {
+    let server = testserver::start_https_ok("127.0.0.1:0").unwrap();
+    let target = format!("https://localhost:{}/x", server.addr.port());
+    for method in [
+        zpinger::HttpMethod::Connect,
+        zpinger::HttpMethod::Get,
+        zpinger::HttpMethod::Post,
+        zpinger::HttpMethod::Put,
+        zpinger::HttpMethod::Delete,
+        zpinger::HttpMethod::Patch,
+    ] {
+        zpinger::HttpPinger::new(method, target.clone())
+            .with_tls_config(Arc::clone(&server.client_config))
+            .ping()
+            .unwrap_or_else(|e| panic!("{method:?} failed: {e}"));
+    }
+}
+
+#[test]
+fn http_pinger_https_fails_without_trust_anchor() {
+    // Without injecting the test server's cert the default trust
+    // store (webpki-roots, public CAs only) cannot verify the
+    // self-signed cert, so the handshake must fail rather than
+    // silently succeed.
+    let server = testserver::start_https_ok("127.0.0.1:0").unwrap();
+    let target = format!("https://localhost:{}/anything", server.addr.port());
+    let p = zpinger::HttpPinger::new(zpinger::HttpMethod::Get, target);
+    assert!(p.ping().is_err());
 }
 
 #[test]

@@ -10,6 +10,9 @@ license = "MIT"
 
 [dependencies]
 regex = "1.1.9"
+rustls = { version = "0.23", default-features = false, features = ["std", "ring", "tls12", "logging"] }
+rustls-pki-types = "1"
+webpki-roots = "0.26"
 
 [dev-dependencies]
 testserver = { path = "../testserver" }

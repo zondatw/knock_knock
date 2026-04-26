@@ -7,11 +7,14 @@ mod test_pinger;
 mod http;
 mod level4;
 mod pinger;
+mod tls;
 pub mod uri;
 
 pub use crate::http::{HttpMethod, HttpPinger};
 pub use crate::level4::{TcpPinger, UdpPinger};
 pub use crate::pinger::{timed, Pinger};
+pub use crate::tls::default_client_config;
+pub use rustls::ClientConfig;
 
 pub(crate) const BUF_SIZE: usize = 0xFF;
 pub(crate) const HTTP_UNCONNECT_STATUS_CODE: &[&str] = &["404", "501"];

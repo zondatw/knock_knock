@@ -1,6 +1,6 @@
 [package]
 name = "knockknock"
-version = "1.0.2"
+version = "1.1.0"
 authors = ["Zonda Yang <u226699@gmail.com>"]
 description = "CLI tool for ping protocols"
 homepage = "https://github.com/zondatw/knock_knock"
@@ -11,6 +11,6 @@ license = "MIT"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-zpinger = { path = "../zpinger", version = "0.1.0" }
+zpinger = { path = "../zpinger", version = "0.2.0" }
 clap = { version = "4", features = ["derive"] }
 colored = "2"

@@ -1,6 +1,6 @@
 [package]
 name = "zpinger"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Zonda Yang <u226699@gmail.com>"]
 description = "zonda pinger library"
 homepage = "https://github.com/zondatw/knock_knock"

@@ -41,6 +41,35 @@ Hooks enforced (configured in [.pre-commit-config.yaml](.pre-commit-config.yaml)
 Clippy is configured to deny all warnings, so any new lint becomes a
 build failure both locally and in CI.
 
+## Release
+
+Releases are tag-driven and mirror
+[`magic-pack`](https://github.com/zondatw/magic-pack)'s flow. Pushing a
+`v*` tag to GitHub triggers
+[.github/workflows/release.yaml](.github/workflows/release.yaml) which:
+
+1. creates a GitHub Release for the tag,
+2. builds `knockknock` on five targets (linux x64/arm64, macOS
+   x64/arm64, windows x64) and uploads the archives to the Release,
+3. publishes every workspace crate without `publish = false` to
+   [crates.io](https://crates.io) — currently `zpinger` then
+   `knockknock`, in dependency order. `testserver` is excluded.
+
+To cut a release:
+
+```shell
+# 1. bump version in zpinger/Cargo.toml and knockknock/Cargo.toml,
+#    keeping the path-and-version dep on zpinger in sync.
+# 2. commit the bump on main.
+# 3. tag and push.
+git tag v1.2.0
+git push --tags
+```
+
+The repo needs a `CARGO_REGISTRY_TOKEN` secret (GitHub Settings →
+Secrets and variables → Actions) for the publish step to succeed. The
+binary upload jobs only need the default `GITHUB_TOKEN`.
+
 ## Local test server
 
 A small companion binary `testserver` provides TCP echo, UDP echo, and a

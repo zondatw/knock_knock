@@ -129,6 +129,32 @@ pub fn start_https_ok<A: ToSocketAddrs>(addr: A) -> Result<HttpsServer> {
     })
 }
 
+/// Spin up a minimal UDP DNS responder. Each inbound packet that
+/// looks like a DNS query (≥ 12 bytes) is echoed back with the QR
+/// bit flipped on, RCODE forced to 0, and the question section left
+/// untouched. The answer section stays empty — just enough to make
+/// `DnsPinger`'s structural validation pass without parsing actual
+/// records.
+pub fn start_dns_ok<A: ToSocketAddrs>(addr: A) -> Result<SocketAddr> {
+    let socket = UdpSocket::bind(addr)?;
+    let bound = socket.local_addr()?;
+    thread::spawn(move || {
+        let mut buf = [0u8; BUF_SIZE];
+        loop {
+            match socket.recv_from(&mut buf) {
+                Ok((n, src)) if n >= 12 => {
+                    buf[2] |= 0x80; // QR = 1 (response)
+                    buf[3] &= 0xF0; // RCODE = 0
+                    let _ = socket.send_to(&buf[..n], src);
+                }
+                Ok(_) => {}
+                Err(_) => break,
+            }
+        }
+    });
+    Ok(bound)
+}
+
 /// Spin up a plain (`ws://`) WebSocket echo / ping server. Each
 /// connection is upgraded by tungstenite, then the server replies to
 /// any incoming PING with a PONG carrying the same payload.

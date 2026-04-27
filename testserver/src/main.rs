@@ -25,6 +25,10 @@ struct Args {
     #[arg(long, default_value_t = 18003)]
     ws: u16,
 
+    /// DNS responder port (use 0 for ephemeral)
+    #[arg(long, default_value_t = 18004)]
+    dns: u16,
+
     /// Bind address (default 0.0.0.0; use 127.0.0.1 for loopback only)
     #[arg(long, default_value = "0.0.0.0")]
     bind: String,
@@ -59,17 +63,22 @@ fn main() {
     let ws = start_or_die("ws", args.ws, || {
         testserver::start_ws_ok(format!("{bind}:{}", args.ws))
     });
+    let dns = start_or_die("dns", args.dns, || {
+        testserver::start_dns_ok(format!("{bind}:{}", args.dns))
+    });
 
     println!("[tcp]  listening on {tcp}");
     println!("[udp]  listening on {udp}");
     println!("[http] listening on {http}");
     println!("[ws]   listening on {ws}");
+    println!("[dns]  listening on {dns}");
     println!();
     println!("Try in another terminal:");
     println!("  knockknock tcp localhost:{}", tcp.port());
     println!("  knockknock udp localhost:{}", udp.port());
     println!("  knockknock http get localhost:{}/anything", http.port());
     println!("  knockknock ws ws://localhost:{}/", ws.port());
+    println!("  knockknock dns 127.0.0.1:{} -q example.com", dns.port());
     println!();
     println!("Press Ctrl+C to stop.");
 

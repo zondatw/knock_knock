@@ -243,3 +243,86 @@ fn ws_pinger_usable_as_trait_object() {
     let p: Box<dyn Pinger> = Box::new(zpinger::WebSocketPinger::new(target));
     p.ping().unwrap();
 }
+
+#[test]
+fn dns_pinger_succeeds_on_test_server() {
+    let addr = testserver::start_dns_ok("127.0.0.1:0").unwrap();
+    let p = zpinger::DnsPinger::new(addr.to_string(), "example.com");
+    p.ping().unwrap();
+}
+
+#[test]
+fn dns_pinger_via_timed_helper() {
+    let addr = testserver::start_dns_ok("127.0.0.1:0").unwrap();
+    let p = zpinger::DnsPinger::new(addr.to_string(), "example.com");
+    let elapsed = zpinger::timed(&p).unwrap();
+    assert!(elapsed > Duration::from_nanos(0));
+}
+
+#[test]
+fn dns_pinger_with_record_type() {
+    let addr = testserver::start_dns_ok("127.0.0.1:0").unwrap();
+    let p = zpinger::DnsPinger::new(addr.to_string(), "example.com")
+        .with_record_type(zpinger::RecordType::Aaaa);
+    p.ping().unwrap();
+}
+
+#[test]
+fn dns_pinger_rejects_empty_query() {
+    let addr = testserver::start_dns_ok("127.0.0.1:0").unwrap();
+    let p = zpinger::DnsPinger::new(addr.to_string(), "");
+    assert!(p.ping().is_err());
+}
+
+#[test]
+fn dns_pinger_times_out_on_silent_port() {
+    // UDP has no "connection refused" — bind a port that never responds
+    // and confirm DnsPinger surfaces the timeout instead of hanging.
+    let silent = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
+    let addr = silent.local_addr().unwrap();
+    // intentionally do NOT spawn a reader; the socket stays alive but
+    // never replies.
+    let p = zpinger::DnsPinger::new(addr.to_string(), "example.com")
+        .with_timeout(Duration::from_millis(150));
+    assert!(p.ping().is_err());
+    drop(silent);
+}
+
+#[test]
+fn dns_pinger_usable_as_trait_object() {
+    let addr = testserver::start_dns_ok("127.0.0.1:0").unwrap();
+    let p: Box<dyn Pinger> = Box::new(zpinger::DnsPinger::new(addr.to_string(), "example.com"));
+    p.ping().unwrap();
+}
+
+#[test]
+fn dns_pinger_rejects_response_with_tampered_question() {
+    // Hand-rolled tiny UDP server: receive the query, set QR=1 +
+    // RCODE=0 like the real testserver, but corrupt one byte inside
+    // the question section before sending the packet back. The
+    // pinger's question-echo check must catch this.
+    use std::net::UdpSocket;
+    use std::thread;
+
+    let server = UdpSocket::bind("127.0.0.1:0").unwrap();
+    let addr = server.local_addr().unwrap();
+    thread::spawn(move || {
+        let mut buf = [0u8; 512];
+        if let Ok((n, src)) = server.recv_from(&mut buf) {
+            if n >= 14 {
+                buf[2] |= 0x80; // QR=1
+                buf[3] &= 0xF0; // RCODE=0
+                buf[13] ^= 0xFF; // tamper with the question section
+                let _ = server.send_to(&buf[..n], src);
+            }
+        }
+    });
+
+    let p = zpinger::DnsPinger::new(addr.to_string(), "example.com")
+        .with_timeout(Duration::from_millis(500));
+    let err = p.ping().expect_err("tampered question must be rejected");
+    assert!(
+        err.to_string().contains("question"),
+        "unexpected error message: {err}"
+    );
+}

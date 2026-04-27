@@ -9,7 +9,7 @@ edition = "2021"
 license = "MIT"
 
 [dependencies]
-regex = "1.1.9"
+regex = "1"
 rustls = { version = "0.23", default-features = false, features = ["std", "ring", "tls12", "logging"] }
 rustls-pki-types = "1"
 tungstenite = { version = "0.24", default-features = false, features = ["handshake"] }

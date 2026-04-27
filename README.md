@@ -58,13 +58,18 @@ Releases are tag-driven and mirror
 To cut a release:
 
 ```shell
-# 1. bump version in zpinger/Cargo.toml and knockknock/Cargo.toml,
+# 1. update CHANGELOG.md — promote [Unreleased] to the new version
+#    section.
+# 2. bump version in zpinger/Cargo.toml and knockknock/Cargo.toml,
 #    keeping the path-and-version dep on zpinger in sync.
-# 2. commit the bump on main.
-# 3. tag and push.
+# 3. commit the bump as its own commit:
+#       Bumped version: zpinger X.Y.Z, knockknock A.B.C
+# 4. tag and push.
 git tag v1.2.0
 git push --tags
 ```
+
+See [CHANGELOG.md](CHANGELOG.md) for release history.
 
 The repo needs a `CARGO_REGISTRY_TOKEN` secret (GitHub Settings →
 Secrets and variables → Actions) for the publish step to succeed. The

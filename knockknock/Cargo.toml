@@ -13,4 +13,4 @@ license = "MIT"
 [dependencies]
 zpinger = { path = "../zpinger", version = "0.2.0" }
 clap = { version = "4", features = ["derive"] }
-colored = "2"
+colored = "3"

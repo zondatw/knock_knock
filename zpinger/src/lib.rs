@@ -4,6 +4,7 @@ use std::net::{SocketAddr, ToSocketAddrs};
 #[cfg(test)]
 mod test_pinger;
 
+mod dns;
 mod http;
 mod level4;
 mod pinger;
@@ -11,6 +12,7 @@ mod tls;
 pub mod uri;
 mod websocket;
 
+pub use crate::dns::{DnsPinger, RecordType};
 pub use crate::http::{HttpMethod, HttpPinger};
 pub use crate::level4::{TcpPinger, UdpPinger};
 pub use crate::pinger::{timed, Pinger};

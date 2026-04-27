@@ -7,6 +7,25 @@ version of each published crate.
 
 ## [Unreleased]
 
+### Added
+- **DNS pinger** (`zpinger::DnsPinger`, `RecordType` enum). Sends one
+  UDP query (RFC 1035 wire format, hand-rolled — no external DNS
+  crate) and validates the response: matching 16-bit ID, QR bit
+  set, RCODE = 0, QDCOUNT = 1, and the question section echoed
+  byte-for-byte from the request (per RFC 1035 §4.1.2). The "did
+  the server reply" probe is intentionally narrower than a full
+  resolver — answer record content is not parsed. Supported record
+  types: A, AAAA, CNAME, MX, NS, TXT.
+- `knockknock dns <server> -q <name> [-t <type>]` subcommand.
+  `<server>` accepts bare host (`8.8.8.8`), host:port, or
+  schemeless URLs; default port 53.
+- `testserver::start_dns_ok` and `testserver --dns <port>` (default
+  18004) for end-to-end testing without any external resolver.
+
+### Fixed
+- DNS subcommand's "DNS lookup:" CLI banner now resolves with the
+  scheme-appropriate port 53 instead of the generic default 80.
+
 ### Security
 - **HIGH** — Bump `regex` to ≥1.5.5 (GHSA-m5pq-gvj9-9vr8, ReDoS).
   Workspace was holding `regex 1.5.4` via Cargo.lock; resolved to

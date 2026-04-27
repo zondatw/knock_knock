@@ -1,8 +1,8 @@
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use colored::*;
 use std::io::Result;
 use std::time::Duration;
-use zpinger::{HttpPinger, Pinger, TcpPinger, UdpPinger, WebSocketPinger};
+use zpinger::{DnsPinger, HttpPinger, Pinger, TcpPinger, UdpPinger, WebSocketPinger};
 
 #[derive(Parser)]
 #[command(name = "knockknock", version, about = "CLI tool for ping protocols")]
@@ -29,6 +29,42 @@ enum Command {
     /// WebSocket ping (ws:// or wss://) — runs full upgrade handshake
     /// plus a control PING/PONG round trip.
     Ws { target: String },
+    /// DNS ping — sends one UDP query to the resolver and validates
+    /// the response.
+    Dns {
+        /// DNS server (e.g. `8.8.8.8`, `1.1.1.1`, `dns.example.com:53`).
+        /// Default port is 53 if not specified.
+        server: String,
+        /// Domain name to look up (e.g. `example.com`).
+        #[arg(short = 'q', long)]
+        query: String,
+        /// DNS record type.
+        #[arg(short = 't', long, value_enum, default_value_t = DnsType::A)]
+        record_type: DnsType,
+    },
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum DnsType {
+    A,
+    Aaaa,
+    Cname,
+    Mx,
+    Ns,
+    Txt,
+}
+
+impl From<DnsType> for zpinger::RecordType {
+    fn from(value: DnsType) -> Self {
+        match value {
+            DnsType::A => zpinger::RecordType::A,
+            DnsType::Aaaa => zpinger::RecordType::Aaaa,
+            DnsType::Cname => zpinger::RecordType::Cname,
+            DnsType::Mx => zpinger::RecordType::Mx,
+            DnsType::Ns => zpinger::RecordType::Ns,
+            DnsType::Txt => zpinger::RecordType::Txt,
+        }
+    }
 }
 
 #[derive(Subcommand)]
@@ -81,6 +117,7 @@ fn target_of(command: &Command) -> &str {
         Command::Tcp { target } => target,
         Command::Udp { target } => target,
         Command::Ws { target } => target,
+        Command::Dns { server, .. } => server,
         Command::Http { method } => match method {
             HttpMethod::Connect { target }
             | HttpMethod::Get { target }
@@ -97,6 +134,13 @@ fn build_pinger(command: &Command) -> Box<dyn Pinger> {
         Command::Tcp { target } => Box::new(TcpPinger::new(target.clone())),
         Command::Udp { target } => Box::new(UdpPinger::new(target.clone())),
         Command::Ws { target } => Box::new(WebSocketPinger::new(target.clone())),
+        Command::Dns {
+            server,
+            query,
+            record_type,
+        } => Box::new(
+            DnsPinger::new(server.clone(), query.clone()).with_record_type((*record_type).into()),
+        ),
         Command::Http { method } => {
             let (m, target) = match method {
                 HttpMethod::Connect { target } => (zpinger::HttpMethod::Connect, target),
@@ -117,7 +161,22 @@ fn main() -> Result<()> {
     let count = cli.count;
     let pinger = build_pinger(&cli.command);
 
-    let server = zpinger::resolve(&target);
+    let resolve_target = match &cli.command {
+        // DNS subcommand: zpinger::resolve defaults to port 80 for
+        // schemeless inputs, but a DNS server's well-known port is 53.
+        // Patch the target so the "DNS lookup:" display shows the
+        // address the pinger will actually talk to.
+        Command::Dns { server, .. } => {
+            let uri = zpinger::uri::get_uri(server);
+            if uri.port == 0 && !uri.domain.is_empty() {
+                format!("{}:53", uri.domain)
+            } else {
+                server.clone()
+            }
+        }
+        _ => target.clone(),
+    };
+    let server = zpinger::resolve(&resolve_target);
     println!("DNS lookup: {:?}", server);
 
     let mut total_time = Duration::new(0, 0);
@@ -244,6 +303,16 @@ mod tests {
             &["knockknock", "http", "patch", "localhost:1"],
             &["knockknock", "ws", "ws://localhost:1"],
             &["knockknock", "ws", "wss://localhost:1"],
+            &["knockknock", "dns", "127.0.0.1:1", "-q", "example.com"],
+            &[
+                "knockknock",
+                "dns",
+                "8.8.8.8",
+                "-q",
+                "example.com",
+                "-t",
+                "aaaa",
+            ],
         ];
         for args in cases {
             let cli = parse(args);
@@ -256,5 +325,58 @@ mod tests {
         let cli = parse(&["knockknock", "ws", "ws://localhost:18000/echo"]);
         assert!(matches!(cli.command, Command::Ws { .. }));
         assert_eq!(target_of(&cli.command), "ws://localhost:18000/echo");
+    }
+
+    #[test]
+    fn parses_dns_subcommand_default_type() {
+        let cli = parse(&["knockknock", "dns", "8.8.8.8", "-q", "example.com"]);
+        match &cli.command {
+            Command::Dns {
+                server,
+                query,
+                record_type,
+            } => {
+                assert_eq!(server, "8.8.8.8");
+                assert_eq!(query, "example.com");
+                assert!(matches!(record_type, DnsType::A));
+            }
+            other => panic!(
+                "expected Dns, got {other:?}",
+                other = std::mem::discriminant(other)
+            ),
+        }
+    }
+
+    #[test]
+    fn parses_dns_subcommand_aaaa_type() {
+        let cli = parse(&[
+            "knockknock",
+            "dns",
+            "1.1.1.1:5353",
+            "-q",
+            "example.com",
+            "-t",
+            "aaaa",
+        ]);
+        match &cli.command {
+            Command::Dns {
+                server,
+                record_type,
+                ..
+            } => {
+                assert_eq!(server, "1.1.1.1:5353");
+                assert!(matches!(record_type, DnsType::Aaaa));
+            }
+            other => panic!(
+                "expected Dns, got {other:?}",
+                other = std::mem::discriminant(other)
+            ),
+        }
+    }
+
+    #[test]
+    fn dns_subcommand_requires_query() {
+        let result = Cli::try_parse_from(["knockknock", "dns", "8.8.8.8"]);
+        assert!(result.is_err());
     }
 }

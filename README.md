@@ -87,19 +87,21 @@ $ cargo run -p testserver
 [udp]  listening on 0.0.0.0:18001
 [http] listening on 0.0.0.0:18002
 [ws]   listening on 0.0.0.0:18003
+[dns]  listening on 0.0.0.0:18004
 
 Try in another terminal:
   knockknock tcp localhost:18000
   knockknock udp localhost:18001
   knockknock http get localhost:18002/anything
   knockknock ws ws://localhost:18003/
+  knockknock dns 127.0.0.1:18004 -q example.com
 ```
 
 If the default ports are taken, override them (use `0` for an OS-picked
 ephemeral port, or pass any specific number):
 
 ```shell
-$ cargo run -p testserver -- --tcp 0 --udp 0 --http 0 --ws 0 --bind 127.0.0.1
+$ cargo run -p testserver -- --tcp 0 --udp 0 --http 0 --ws 0 --dns 0 --bind 127.0.0.1
 ```
 
 The same servers are used by `zpinger`'s integration tests, so
@@ -117,6 +119,8 @@ Commands:
   http  HTTP ping (with subcommands: connect, get, post, put, delete, patch)
   ws    WebSocket ping (ws:// or wss://) — full upgrade handshake
         plus a control PING/PONG round trip
+  dns   DNS ping (UDP/53 default) — sends one query and validates the
+        response
 
 Options:
   -c, --count <COUNT>  ping times [default: 3]
@@ -131,6 +135,8 @@ required:
 $ knockknock http get https://example.com:443/
 $ knockknock ws ws://localhost:18003/
 $ knockknock ws wss://echo.websocket.events/
+$ knockknock dns 8.8.8.8 -q example.com
+$ knockknock dns 1.1.1.1 -q example.com -t aaaa
 ```
 
 ### Ping TCP path

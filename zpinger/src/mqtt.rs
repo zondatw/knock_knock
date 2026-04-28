@@ -1,4 +1,6 @@
-//! MQTT 3.1.1 pinger — hand-rolled, sync, zero new external deps.
+//! MQTT 3.1.1 / 5 pinger — hand-rolled wire format, async I/O via
+//! tokio. Zero new protocol-side deps; uses the same rustls layer as
+//! HttpPinger for `mqtts://`.
 //!
 //! The "ping" runs the smallest meaningful MQTT exchange:
 //! CONNECT → CONNACK → PINGREQ → PINGRESP → DISCONNECT. That covers
@@ -6,14 +8,18 @@
 //! and the steady-state control-packet RTT, in line with how the
 //! WebSocket pinger combines upgrade + PING/PONG.
 
-use std::io::{self, prelude::*, Result};
-use std::net::TcpStream;
+use std::io::{self, Result};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use async_trait::async_trait;
 use rustls::pki_types::ServerName;
-use rustls::{ClientConfig, ClientConnection, StreamOwned};
+use rustls::ClientConfig;
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio::net::TcpStream;
+use tokio_rustls::TlsConnector;
 
+use crate::level4::with_timeout;
 use crate::pinger::Pinger;
 use crate::tls::default_client_config;
 use crate::uri::{get_uri, URI};
@@ -110,15 +116,19 @@ impl MqttPinger {
         self
     }
 
-    fn ping_plain(&self, uri: &URI) -> Result<()> {
+    async fn ping_plain(&self, uri: &URI) -> Result<()> {
         let endpoint = endpoint_for(uri, DEFAULT_PORT_PLAIN)?;
-        let mut stream = TcpStream::connect(&endpoint)?;
-        stream.set_read_timeout(Some(self.timeout))?;
-        stream.set_write_timeout(Some(self.timeout))?;
-        run_session(&mut stream, &self.client_id, self.keepalive, self.version)
+        let client_id = self.client_id.clone();
+        let keepalive = self.keepalive;
+        let version = self.version;
+        with_timeout(self.timeout, async move {
+            let mut stream = TcpStream::connect(&endpoint).await?;
+            run_session(&mut stream, &client_id, keepalive, version).await
+        })
+        .await
     }
 
-    fn ping_tls(&self, uri: &URI) -> Result<()> {
+    async fn ping_tls(&self, uri: &URI) -> Result<()> {
         let endpoint = endpoint_for(uri, DEFAULT_PORT_TLS)?;
         let server_name = ServerName::try_from(uri.domain.clone())
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
@@ -126,22 +136,27 @@ impl MqttPinger {
             .tls_config
             .clone()
             .unwrap_or_else(default_client_config);
-        let conn = ClientConnection::new(config, server_name).map_err(io::Error::other)?;
-        let tcp = TcpStream::connect(&endpoint)?;
-        tcp.set_read_timeout(Some(self.timeout))?;
-        tcp.set_write_timeout(Some(self.timeout))?;
-        let mut stream = StreamOwned::new(conn, tcp);
-        run_session(&mut stream, &self.client_id, self.keepalive, self.version)
+        let client_id = self.client_id.clone();
+        let keepalive = self.keepalive;
+        let version = self.version;
+        with_timeout(self.timeout, async move {
+            let tcp = TcpStream::connect(&endpoint).await?;
+            let connector = TlsConnector::from(config);
+            let mut stream = connector.connect(server_name, tcp).await?;
+            run_session(&mut stream, &client_id, keepalive, version).await
+        })
+        .await
     }
 }
 
+#[async_trait]
 impl Pinger for MqttPinger {
-    fn ping(&self) -> Result<()> {
+    async fn ping(&self) -> Result<()> {
         let uri = get_uri(&self.server);
         let scheme = uri.scheme.to_ascii_lowercase();
         match scheme.as_str() {
-            "" | "mqtt" => self.ping_plain(&uri),
-            "mqtts" => self.ping_tls(&uri),
+            "" | "mqtt" => self.ping_plain(&uri).await,
+            "mqtts" => self.ping_tls(&uri).await,
             other => Err(io::Error::other(format!(
                 "scheme '{other}' is not supported by MqttPinger (use mqtt:// or mqtts://)"
             ))),
@@ -173,12 +188,15 @@ fn default_client_id() -> String {
 }
 
 /// Drive a full ping session over an established stream.
-fn run_session<S: Read + Write>(
+async fn run_session<S>(
     stream: &mut S,
     client_id: &Option<String>,
     keepalive: u16,
     version: MqttVersion,
-) -> Result<()> {
+) -> Result<()>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
     let cid_owned;
     let cid: &str = match client_id {
         Some(c) => c.as_str(),
@@ -188,24 +206,18 @@ fn run_session<S: Read + Write>(
         }
     };
 
-    // CONNECT
     let connect = build_connect(cid, keepalive, version);
-    stream.write_all(&connect)?;
+    stream.write_all(&connect).await?;
 
-    // CONNACK
-    let connack = read_packet(stream)?;
+    let connack = read_packet(stream).await?;
     validate_connack(&connack)?;
 
-    // PINGREQ
-    stream.write_all(&[TYPE_PINGREQ, 0x00])?;
+    stream.write_all(&[TYPE_PINGREQ, 0x00]).await?;
 
-    // PINGRESP
-    let pingresp = read_packet(stream)?;
+    let pingresp = read_packet(stream).await?;
     validate_pingresp(&pingresp)?;
 
-    // DISCONNECT — best-effort. If the broker has already torn down
-    // the socket we don't want that to mask a successful ping.
-    let _ = stream.write_all(&[TYPE_DISCONNECT, 0x00]);
+    let _ = stream.write_all(&[TYPE_DISCONNECT, 0x00]).await;
 
     Ok(())
 }
@@ -263,21 +275,24 @@ fn encode_varint(n: usize) -> Vec<u8> {
     }
 }
 
-fn read_packet<S: Read>(stream: &mut S) -> Result<MqttPacket> {
+async fn read_packet<S>(stream: &mut S) -> Result<MqttPacket>
+where
+    S: AsyncRead + Unpin,
+{
     let mut header = [0u8; 1];
-    stream.read_exact(&mut header)?;
+    stream.read_exact(&mut header).await?;
 
     let mut multiplier: usize = 1;
     let mut remaining: usize = 0;
     for _ in 0..4 {
         let mut byte = [0u8; 1];
-        stream.read_exact(&mut byte)?;
+        stream.read_exact(&mut byte).await?;
         let b = byte[0];
         remaining += (b & 0x7F) as usize * multiplier;
         if b & 0x80 == 0 {
             let mut body = vec![0u8; remaining];
             if remaining > 0 {
-                stream.read_exact(&mut body)?;
+                stream.read_exact(&mut body).await?;
             }
             return Ok(MqttPacket {
                 packet_type: header[0],
@@ -390,23 +405,23 @@ mod tests {
         validate_connack(&p).unwrap();
     }
 
-    fn read_one(bytes: Vec<u8>) -> MqttPacket {
+    async fn read_one(bytes: Vec<u8>) -> MqttPacket {
         let mut cur = std::io::Cursor::new(bytes);
-        read_packet(&mut cur).unwrap()
+        read_packet(&mut cur).await.unwrap()
     }
 
-    #[test]
-    fn read_packet_roundtrip() {
+    #[tokio::test]
+    async fn read_packet_roundtrip() {
         let bytes = vec![TYPE_CONNACK, 0x02, 0x00, 0x00];
-        let p = read_one(bytes);
+        let p = read_one(bytes).await;
         assert_eq!(p.packet_type, TYPE_CONNACK);
         assert_eq!(p.body, vec![0x00, 0x00]);
     }
 
-    #[test]
-    fn read_packet_zero_body() {
+    #[tokio::test]
+    async fn read_packet_zero_body() {
         let bytes = vec![TYPE_PINGRESP, 0x00];
-        let p = read_one(bytes);
+        let p = read_one(bytes).await;
         assert_eq!(p.packet_type, TYPE_PINGRESP);
         assert!(p.body.is_empty());
     }

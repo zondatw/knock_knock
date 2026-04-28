@@ -1,4 +1,4 @@
-use std::net::{SocketAddr, ToSocketAddrs};
+use std::net::SocketAddr;
 
 #[path = "tests/test_pinger.rs"]
 #[cfg(test)]
@@ -31,7 +31,7 @@ pub(crate) const HTTP_UNCONNECT_STATUS_CODE: &[&str] = &["404", "501"];
 /// fails or the host is empty — callers (the CLI in particular)
 /// treat the result as informational and let the actual pinger
 /// surface the real error.
-pub fn resolve(url: &str) -> Vec<SocketAddr> {
+pub async fn resolve(url: &str) -> Vec<SocketAddr> {
     let uri = uri::get_uri(url);
     if uri.domain.is_empty() {
         return Vec::new();
@@ -44,8 +44,8 @@ pub fn resolve(url: &str) -> Vec<SocketAddr> {
             _ => 80,
         }
     };
-    format!("{}:{}", uri.domain, port)
-        .to_socket_addrs()
-        .map(|it| it.collect())
-        .unwrap_or_default()
+    match tokio::net::lookup_host(format!("{}:{}", uri.domain, port)).await {
+        Ok(iter) => iter.collect(),
+        Err(_) => Vec::new(),
+    }
 }

@@ -198,7 +198,8 @@ fn build_pinger(command: &Command) -> Box<dyn Pinger> {
     }
 }
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     let cli = Cli::parse();
     let target = target_of(&cli.command).to_string();
     let count = cli.count;
@@ -221,13 +222,13 @@ fn main() -> Result<()> {
         }
         _ => target.clone(),
     };
-    let server = zpinger::resolve(&resolve_target);
+    let server = zpinger::resolve(&resolve_target).await;
     println!("DNS lookup: {:?}", server);
 
     let mut total_time = Duration::new(0, 0);
     let mut lose_count: u64 = 0;
     for _ in 0..count {
-        match zpinger::timed(pinger.as_ref()) {
+        match zpinger::timed(pinger.as_ref()).await {
             Ok(elapsed_time) => {
                 display_ping_info(&target, elapsed_time);
                 total_time += elapsed_time;

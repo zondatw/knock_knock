@@ -266,7 +266,7 @@ checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
 name = "knockknock"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "clap",
  "colored",
@@ -786,7 +786,7 @@ checksum = "b97154e67e32c85465826e8bcc1c59429aaaf107c1e4a9e53c8d8ccd5eff88d0"
 
 [[package]]
 name = "zpinger"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "regex",
  "rustls",

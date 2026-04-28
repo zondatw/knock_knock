@@ -7,6 +7,8 @@ version of each published crate.
 
 ## [Unreleased]
 
+## [1.2.0] / zpinger 0.3.0 — 2026-04-28
+
 ### Added
 - **MQTT pinger** (`zpinger::MqttPinger`, `MqttVersion`). Sync,
   zero new external deps, hand-rolled MQTT (CONNECT/CONNACK +

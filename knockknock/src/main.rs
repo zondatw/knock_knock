@@ -2,7 +2,9 @@ use clap::{Parser, Subcommand, ValueEnum};
 use colored::*;
 use std::io::Result;
 use std::time::Duration;
-use zpinger::{DnsPinger, HttpPinger, Pinger, TcpPinger, UdpPinger, WebSocketPinger};
+use zpinger::{
+    DnsPinger, HttpPinger, MqttPinger, MqttVersion, Pinger, TcpPinger, UdpPinger, WebSocketPinger,
+};
 
 #[derive(Parser)]
 #[command(name = "knockknock", version, about = "CLI tool for ping protocols")]
@@ -41,6 +43,23 @@ enum Command {
         /// DNS record type.
         #[arg(short = 't', long, value_enum, default_value_t = DnsType::A)]
         record_type: DnsType,
+    },
+    /// MQTT 3.1.1 ping (mqtt:// or mqtts://). Runs the
+    /// CONNECT/CONNACK handshake plus a PINGREQ/PINGRESP control
+    /// round trip, then DISCONNECT. Default port 1883 plain, 8883
+    /// TLS.
+    Mqtt {
+        /// MQTT broker (e.g. `mqtt://broker.example.com:1883`,
+        /// `mqtts://broker.example.com:8883`, or just
+        /// `broker.example.com` for plain MQTT on 1883).
+        broker: String,
+        /// MQTT client identifier sent in the CONNECT packet.
+        /// Defaults to `knockknock-<random>`.
+        #[arg(long)]
+        client_id: Option<String>,
+        /// Speak MQTT 5 instead of the default MQTT 3.1.1.
+        #[arg(long)]
+        v5: bool,
     },
 }
 
@@ -112,12 +131,22 @@ fn display_statistic(total_time: Duration, count: u64, recv_count: u64, lose_cou
     );
 }
 
+fn default_port_target(target: &str, default_port: u16) -> String {
+    let uri = zpinger::uri::get_uri(target);
+    if uri.port == 0 && !uri.domain.is_empty() {
+        format!("{}:{default_port}", uri.domain)
+    } else {
+        target.to_string()
+    }
+}
+
 fn target_of(command: &Command) -> &str {
     match command {
         Command::Tcp { target } => target,
         Command::Udp { target } => target,
         Command::Ws { target } => target,
         Command::Dns { server, .. } => server,
+        Command::Mqtt { broker, .. } => broker,
         Command::Http { method } => match method {
             HttpMethod::Connect { target }
             | HttpMethod::Get { target }
@@ -141,6 +170,20 @@ fn build_pinger(command: &Command) -> Box<dyn Pinger> {
         } => Box::new(
             DnsPinger::new(server.clone(), query.clone()).with_record_type((*record_type).into()),
         ),
+        Command::Mqtt {
+            broker,
+            client_id,
+            v5,
+        } => {
+            let mut p = MqttPinger::new(broker.clone());
+            if let Some(cid) = client_id {
+                p = p.with_client_id(cid.clone());
+            }
+            if *v5 {
+                p = p.with_version(MqttVersion::V5);
+            }
+            Box::new(p)
+        }
         Command::Http { method } => {
             let (m, target) = match method {
                 HttpMethod::Connect { target } => (zpinger::HttpMethod::Connect, target),
@@ -162,17 +205,19 @@ fn main() -> Result<()> {
     let pinger = build_pinger(&cli.command);
 
     let resolve_target = match &cli.command {
-        // DNS subcommand: zpinger::resolve defaults to port 80 for
-        // schemeless inputs, but a DNS server's well-known port is 53.
-        // Patch the target so the "DNS lookup:" display shows the
-        // address the pinger will actually talk to.
-        Command::Dns { server, .. } => {
-            let uri = zpinger::uri::get_uri(server);
-            if uri.port == 0 && !uri.domain.is_empty() {
-                format!("{}:53", uri.domain)
+        // DNS / MQTT subcommands: zpinger::resolve defaults to port
+        // 80 for schemeless inputs, which is wrong for these
+        // protocols. Patch the target so the "DNS lookup:" display
+        // shows the address the pinger will actually talk to.
+        Command::Dns { server, .. } => default_port_target(server, 53),
+        Command::Mqtt { broker, .. } => {
+            let uri = zpinger::uri::get_uri(broker);
+            let scheme_default = if uri.scheme.eq_ignore_ascii_case("mqtts") {
+                8883
             } else {
-                server.clone()
-            }
+                1883
+            };
+            default_port_target(broker, scheme_default)
         }
         _ => target.clone(),
     };
@@ -313,6 +358,16 @@ mod tests {
                 "-t",
                 "aaaa",
             ],
+            &["knockknock", "mqtt", "mqtt://localhost:1883"],
+            &["knockknock", "mqtt", "mqtts://broker.example.com"],
+            &[
+                "knockknock",
+                "mqtt",
+                "mqtt://localhost:1883",
+                "--client-id",
+                "custom",
+            ],
+            &["knockknock", "mqtt", "mqtt://localhost:1883", "--v5"],
         ];
         for args in cases {
             let cli = parse(args);
@@ -377,6 +432,58 @@ mod tests {
     #[test]
     fn dns_subcommand_requires_query() {
         let result = Cli::try_parse_from(["knockknock", "dns", "8.8.8.8"]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parses_mqtt_subcommand_default_client_id() {
+        let cli = parse(&["knockknock", "mqtt", "mqtt://localhost:1883"]);
+        match &cli.command {
+            Command::Mqtt {
+                broker,
+                client_id,
+                v5,
+            } => {
+                assert_eq!(broker, "mqtt://localhost:1883");
+                assert!(client_id.is_none());
+                assert!(!v5, "default should be MQTT 3.1.1");
+            }
+            other => panic!("expected Mqtt, got {:?}", std::mem::discriminant(other)),
+        }
+    }
+
+    #[test]
+    fn parses_mqtt_subcommand_with_client_id() {
+        let cli = parse(&[
+            "knockknock",
+            "mqtt",
+            "mqtts://broker.example.com:8883",
+            "--client-id",
+            "test-client",
+        ]);
+        match &cli.command {
+            Command::Mqtt {
+                broker, client_id, ..
+            } => {
+                assert_eq!(broker, "mqtts://broker.example.com:8883");
+                assert_eq!(client_id.as_deref(), Some("test-client"));
+            }
+            other => panic!("expected Mqtt, got {:?}", std::mem::discriminant(other)),
+        }
+    }
+
+    #[test]
+    fn parses_mqtt_subcommand_with_v5_flag() {
+        let cli = parse(&["knockknock", "mqtt", "mqtt://broker.example.com", "--v5"]);
+        match &cli.command {
+            Command::Mqtt { v5, .. } => assert!(v5),
+            other => panic!("expected Mqtt, got {:?}", std::mem::discriminant(other)),
+        }
+    }
+
+    #[test]
+    fn mqtt_subcommand_requires_broker() {
+        let result = Cli::try_parse_from(["knockknock", "mqtt"]);
         assert!(result.is_err());
     }
 }

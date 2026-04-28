@@ -296,6 +296,94 @@ fn dns_pinger_usable_as_trait_object() {
 }
 
 #[test]
+fn mqtt_pinger_succeeds_against_test_broker() {
+    let addr = testserver::start_mqtt_ok("127.0.0.1:0").unwrap();
+    let p = zpinger::MqttPinger::new(format!("mqtt://{addr}"));
+    p.ping().unwrap();
+}
+
+#[test]
+fn mqtt_pinger_via_timed_helper() {
+    let addr = testserver::start_mqtt_ok("127.0.0.1:0").unwrap();
+    let p = zpinger::MqttPinger::new(format!("mqtt://{addr}"));
+    let elapsed = zpinger::timed(&p).unwrap();
+    assert!(elapsed > Duration::from_nanos(0));
+}
+
+#[test]
+fn mqtt_pinger_with_custom_client_id() {
+    let addr = testserver::start_mqtt_ok("127.0.0.1:0").unwrap();
+    let p = zpinger::MqttPinger::new(format!("mqtt://{addr}")).with_client_id("custom-test");
+    p.ping().unwrap();
+}
+
+#[test]
+fn mqtt_pinger_schemeless_uses_plain_path() {
+    let addr = testserver::start_mqtt_ok("127.0.0.1:0").unwrap();
+    let p = zpinger::MqttPinger::new(addr.to_string());
+    p.ping().unwrap();
+}
+
+#[test]
+fn mqtt_pinger_rejects_unknown_scheme() {
+    let p = zpinger::MqttPinger::new("ftp://example.com:21");
+    let err = p
+        .ping()
+        .expect_err("non-mqtt scheme must be rejected up front");
+    assert!(
+        err.to_string().contains("ftp"),
+        "unexpected error message: {err}"
+    );
+}
+
+#[test]
+fn mqtt_pinger_fails_on_closed_port() {
+    let p = zpinger::MqttPinger::new(format!("mqtt://{}", closed_tcp_addr()))
+        .with_timeout(Duration::from_millis(500));
+    assert!(p.ping().is_err());
+}
+
+#[test]
+fn mqtt_pinger_v5_succeeds_against_test_broker() {
+    let addr = testserver::start_mqtt_ok("127.0.0.1:0").unwrap();
+    let p =
+        zpinger::MqttPinger::new(format!("mqtt://{addr}")).with_version(zpinger::MqttVersion::V5);
+    p.ping().unwrap();
+}
+
+#[test]
+fn mqtts_pinger_v5_succeeds_with_trusted_cert() {
+    let server = testserver::start_mqtts_ok("127.0.0.1:0").unwrap();
+    let p = zpinger::MqttPinger::new(format!("mqtts://localhost:{}", server.addr.port()))
+        .with_version(zpinger::MqttVersion::V5)
+        .with_tls_config(server.client_config);
+    p.ping().unwrap();
+}
+
+#[test]
+fn mqtt_pinger_usable_as_trait_object() {
+    let addr = testserver::start_mqtt_ok("127.0.0.1:0").unwrap();
+    let p: Box<dyn Pinger> = Box::new(zpinger::MqttPinger::new(format!("mqtt://{addr}")));
+    p.ping().unwrap();
+}
+
+#[test]
+fn mqtts_pinger_succeeds_with_trusted_cert() {
+    let server = testserver::start_mqtts_ok("127.0.0.1:0").unwrap();
+    let p = zpinger::MqttPinger::new(format!("mqtts://localhost:{}", server.addr.port()))
+        .with_tls_config(server.client_config);
+    p.ping().unwrap();
+}
+
+#[test]
+fn mqtts_pinger_fails_without_trust_anchor() {
+    let server = testserver::start_mqtts_ok("127.0.0.1:0").unwrap();
+    let p = zpinger::MqttPinger::new(format!("mqtts://localhost:{}", server.addr.port()))
+        .with_timeout(Duration::from_millis(500));
+    assert!(p.ping().is_err());
+}
+
+#[test]
 fn dns_pinger_rejects_response_with_tampered_question() {
     // Hand-rolled tiny UDP server: receive the query, set QR=1 +
     // RCODE=0 like the real testserver, but corrupt one byte inside

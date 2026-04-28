@@ -7,6 +7,24 @@ version of each published crate.
 
 ## [Unreleased]
 
+### Changed (BREAKING)
+- **`Pinger` trait is now `async`** — `async fn ping(&self) -> Result<()>`
+  via the `async-trait` macro for object-safety. All seven existing
+  pingers (TCP / UDP / HTTP / HTTPS / WebSocket / WSS / DNS / MQTT v3.1.1
+  + v5) migrated to tokio-based I/O: `tokio::net` for sockets,
+  `tokio-rustls` for TLS, `tokio-tungstenite` for WebSocket. Per-socket
+  read/write timeouts replaced by an overall `tokio::time::timeout`
+  wrapper applied at the start of each `ping`.
+- **`zpinger::resolve` is now `async`** — uses `tokio::net::lookup_host`
+  so it doesn't block the runtime.
+- **`zpinger::timed` is now `async`** — `timed(&p).await`.
+- The `knockknock` binary's `main` is now `#[tokio::main]`.
+
+This unlocks PR 14b's gRPC pinger via `tonic` without a second
+runtime context. testserver's internal threads stay sync — wire-level
+protocols are version-neutral, an async client speaks fine to a sync
+broker on the same TCP socket.
+
 ## [1.2.0] / zpinger 0.3.0 — 2026-04-28
 
 ### Added

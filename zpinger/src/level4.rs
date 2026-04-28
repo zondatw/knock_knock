@@ -1,7 +1,10 @@
-use std::io::prelude::*;
-use std::io::Result;
-use std::net::{TcpStream, UdpSocket};
+use std::io::{self, Result};
 use std::time::Duration;
+
+use async_trait::async_trait;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::{TcpStream, UdpSocket};
+use tokio::time::timeout;
 
 use crate::pinger::Pinger;
 use crate::BUF_SIZE;
@@ -23,23 +26,23 @@ impl TcpPinger {
         }
     }
 
-    pub fn with_timeout(mut self, timeout: Duration) -> Self {
-        self.timeout = timeout;
+    pub fn with_timeout(mut self, t: Duration) -> Self {
+        self.timeout = t;
         self
     }
 }
 
+#[async_trait]
 impl Pinger for TcpPinger {
-    fn ping(&self) -> Result<()> {
-        let mut stream = TcpStream::connect(&self.target)?;
-        let mut buffer = [0; BUF_SIZE];
-
-        stream.set_read_timeout(Some(self.timeout))?;
-        stream.set_write_timeout(Some(self.timeout))?;
-
-        stream.write_all(&[1])?;
-        let _ = stream.read(&mut buffer)?;
-        Ok(())
+    async fn ping(&self) -> Result<()> {
+        with_timeout(self.timeout, async {
+            let mut stream = TcpStream::connect(&self.target).await?;
+            stream.write_all(&[1]).await?;
+            let mut buf = [0u8; BUF_SIZE];
+            let _ = stream.read(&mut buf).await?;
+            Ok(())
+        })
+        .await
     }
 }
 
@@ -58,23 +61,40 @@ impl UdpPinger {
         }
     }
 
-    pub fn with_timeout(mut self, timeout: Duration) -> Self {
-        self.timeout = timeout;
+    pub fn with_timeout(mut self, t: Duration) -> Self {
+        self.timeout = t;
         self
     }
 }
 
+#[async_trait]
 impl Pinger for UdpPinger {
-    fn ping(&self) -> Result<()> {
-        let socket = UdpSocket::bind("127.0.0.1:0")?;
-        let mut buffer = [0; BUF_SIZE];
-        socket.connect(&self.target)?;
+    async fn ping(&self) -> Result<()> {
+        with_timeout(self.timeout, async {
+            let socket = UdpSocket::bind("0.0.0.0:0").await?;
+            socket.connect(&self.target).await?;
+            socket.send(&[1]).await?;
+            let mut buf = [0u8; BUF_SIZE];
+            let _ = socket.recv(&mut buf).await?;
+            Ok(())
+        })
+        .await
+    }
+}
 
-        socket.set_read_timeout(Some(self.timeout))?;
-        socket.set_write_timeout(Some(self.timeout))?;
-
-        let _ = socket.send(&[1])?;
-        let _ = socket.recv_from(&mut buffer)?;
-        Ok(())
+/// Wrap an async operation in a deadline. tokio sockets don't expose
+/// per-read / per-write timeouts; we apply a single overall timeout
+/// instead, which fits the "ping" use case where total time is short
+/// and any individual op stalling means the whole ping has stalled.
+pub(crate) async fn with_timeout<F>(d: Duration, fut: F) -> Result<()>
+where
+    F: std::future::Future<Output = Result<()>>,
+{
+    match timeout(d, fut).await {
+        Ok(inner) => inner,
+        Err(_) => Err(io::Error::new(
+            io::ErrorKind::TimedOut,
+            "operation timed out",
+        )),
     }
 }

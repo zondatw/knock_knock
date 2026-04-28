@@ -1,7 +1,10 @@
 use std::io::{self, Result};
-use std::net::UdpSocket;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use async_trait::async_trait;
+use tokio::net::UdpSocket;
+
+use crate::level4::with_timeout;
 use crate::pinger::Pinger;
 use crate::uri::get_uri;
 
@@ -69,8 +72,9 @@ impl DnsPinger {
     }
 }
 
+#[async_trait]
 impl Pinger for DnsPinger {
-    fn ping(&self) -> Result<()> {
+    async fn ping(&self) -> Result<()> {
         if self.query.is_empty() {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -82,16 +86,16 @@ impl Pinger for DnsPinger {
         let id = random_id();
         let request = build_query(id, &self.query, self.record_type.code())?;
 
-        let socket = UdpSocket::bind("0.0.0.0:0")?;
-        socket.set_read_timeout(Some(self.timeout))?;
-        socket.set_write_timeout(Some(self.timeout))?;
-        socket.connect(&endpoint)?;
+        with_timeout(self.timeout, async move {
+            let socket = UdpSocket::bind("0.0.0.0:0").await?;
+            socket.connect(&endpoint).await?;
+            socket.send(&request).await?;
 
-        socket.send(&request)?;
-
-        let mut buf = [0u8; BUF_SIZE];
-        let n = socket.recv(&mut buf)?;
-        validate_response(&buf[..n], &request, id)
+            let mut buf = [0u8; BUF_SIZE];
+            let n = socket.recv(&mut buf).await?;
+            validate_response(&buf[..n], &request, id)
+        })
+        .await
     }
 }
 

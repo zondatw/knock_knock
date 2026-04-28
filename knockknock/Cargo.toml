@@ -14,3 +14,4 @@ license = "MIT"
 zpinger = { path = "../zpinger", version = "0.3.0" }
 clap = { version = "4", features = ["derive"] }
 colored = "3"
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }

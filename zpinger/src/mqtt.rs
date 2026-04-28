@@ -31,8 +31,32 @@ const TYPE_PINGRESP: u8 = 0xD0;
 const TYPE_DISCONNECT: u8 = 0xE0;
 
 const MQTT_PROTOCOL_NAME: &[u8] = b"MQTT";
-const MQTT_PROTOCOL_LEVEL_3_1_1: u8 = 4;
 const CONNECT_FLAGS_CLEAN_SESSION: u8 = 0x02;
+
+/// MQTT protocol version. Defaults to 3.1.1 (`MQTT-3.1.1-os`); pick
+/// `V5` to advertise MQTT 5.0 in the CONNECT packet.
+///
+/// For the ping use case the wire difference is small: v5 raises the
+/// protocol-level byte from 4 to 5 and adds an empty Properties
+/// section to CONNECT. CONNACK / PINGREQ / PINGRESP / DISCONNECT
+/// happen to be backward-compatible at the bytes we look at — both
+/// versions put the success code at body[1], and a 2-byte
+/// `[0xE0, 0x00]` DISCONNECT is legal in v5 too.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum MqttVersion {
+    #[default]
+    V3_1_1,
+    V5,
+}
+
+impl MqttVersion {
+    fn protocol_level(self) -> u8 {
+        match self {
+            MqttVersion::V3_1_1 => 4,
+            MqttVersion::V5 => 5,
+        }
+    }
+}
 
 /// MQTT pinger.
 ///
@@ -45,6 +69,7 @@ pub struct MqttPinger {
     pub client_id: Option<String>,
     pub keepalive: u16,
     pub timeout: Duration,
+    pub version: MqttVersion,
     tls_config: Option<Arc<ClientConfig>>,
 }
 
@@ -55,6 +80,7 @@ impl MqttPinger {
             client_id: None,
             keepalive: DEFAULT_KEEPALIVE,
             timeout: DEFAULT_TIMEOUT,
+            version: MqttVersion::default(),
             tls_config: None,
         }
     }
@@ -74,6 +100,11 @@ impl MqttPinger {
         self
     }
 
+    pub fn with_version(mut self, version: MqttVersion) -> Self {
+        self.version = version;
+        self
+    }
+
     pub fn with_tls_config(mut self, config: Arc<ClientConfig>) -> Self {
         self.tls_config = Some(config);
         self
@@ -84,7 +115,7 @@ impl MqttPinger {
         let mut stream = TcpStream::connect(&endpoint)?;
         stream.set_read_timeout(Some(self.timeout))?;
         stream.set_write_timeout(Some(self.timeout))?;
-        run_session(&mut stream, &self.client_id, self.keepalive)
+        run_session(&mut stream, &self.client_id, self.keepalive, self.version)
     }
 
     fn ping_tls(&self, uri: &URI) -> Result<()> {
@@ -100,7 +131,7 @@ impl MqttPinger {
         tcp.set_read_timeout(Some(self.timeout))?;
         tcp.set_write_timeout(Some(self.timeout))?;
         let mut stream = StreamOwned::new(conn, tcp);
-        run_session(&mut stream, &self.client_id, self.keepalive)
+        run_session(&mut stream, &self.client_id, self.keepalive, self.version)
     }
 }
 
@@ -146,6 +177,7 @@ fn run_session<S: Read + Write>(
     stream: &mut S,
     client_id: &Option<String>,
     keepalive: u16,
+    version: MqttVersion,
 ) -> Result<()> {
     let cid_owned;
     let cid: &str = match client_id {
@@ -157,7 +189,7 @@ fn run_session<S: Read + Write>(
     };
 
     // CONNECT
-    let connect = build_connect(cid, keepalive);
+    let connect = build_connect(cid, keepalive, version);
     stream.write_all(&connect)?;
 
     // CONNACK
@@ -184,15 +216,21 @@ struct MqttPacket {
     body: Vec<u8>,
 }
 
-fn build_connect(client_id: &str, keepalive: u16) -> Vec<u8> {
+fn build_connect(client_id: &str, keepalive: u16, version: MqttVersion) -> Vec<u8> {
     let cid_bytes = client_id.as_bytes();
 
-    let mut variable_header = Vec::with_capacity(10);
+    let mut variable_header = Vec::with_capacity(12);
     variable_header.extend_from_slice(&(MQTT_PROTOCOL_NAME.len() as u16).to_be_bytes());
     variable_header.extend_from_slice(MQTT_PROTOCOL_NAME);
-    variable_header.push(MQTT_PROTOCOL_LEVEL_3_1_1);
+    variable_header.push(version.protocol_level());
     variable_header.push(CONNECT_FLAGS_CLEAN_SESSION);
     variable_header.extend_from_slice(&keepalive.to_be_bytes());
+    if version == MqttVersion::V5 {
+        // MQTT 5 §3.1.2.11 — Properties section. We don't set any
+        // properties for the ping, but the section itself is required;
+        // a single byte 0x00 is the varint encoding of length 0.
+        variable_header.push(0x00);
+    }
 
     let mut payload = Vec::with_capacity(2 + cid_bytes.len());
     payload.extend_from_slice(&(cid_bytes.len() as u16).to_be_bytes());
@@ -307,8 +345,8 @@ mod tests {
     }
 
     #[test]
-    fn build_connect_smallest_client_id() {
-        let pkt = build_connect("a", 30);
+    fn build_connect_v3_1_1_smallest_client_id() {
+        let pkt = build_connect("a", 30, MqttVersion::V3_1_1);
         // remaining length = 10 (var header) + 3 (cid u16 len + 1 byte) = 13
         // total = 1 (type) + 1 (varint) + 13 = 15 bytes
         assert_eq!(pkt.len(), 15);
@@ -316,11 +354,40 @@ mod tests {
         assert_eq!(pkt[1], 13);
         assert_eq!(&pkt[2..4], &(MQTT_PROTOCOL_NAME.len() as u16).to_be_bytes());
         assert_eq!(&pkt[4..8], MQTT_PROTOCOL_NAME);
-        assert_eq!(pkt[8], MQTT_PROTOCOL_LEVEL_3_1_1);
+        assert_eq!(pkt[8], 4); // protocol level 4 = MQTT 3.1.1
         assert_eq!(pkt[9], CONNECT_FLAGS_CLEAN_SESSION);
         assert_eq!(&pkt[10..12], &30u16.to_be_bytes());
         assert_eq!(&pkt[12..14], &1u16.to_be_bytes());
         assert_eq!(pkt[14], b'a');
+    }
+
+    #[test]
+    fn build_connect_v5_includes_empty_properties() {
+        let pkt = build_connect("a", 30, MqttVersion::V5);
+        // v5 inserts one extra byte (properties length varint = 0x00)
+        // between keepalive and the payload, so the packet is 1 byte
+        // longer than the v3.1.1 case.
+        assert_eq!(pkt.len(), 16);
+        assert_eq!(pkt[0], TYPE_CONNECT);
+        assert_eq!(pkt[1], 14);
+        assert_eq!(pkt[8], 5); // protocol level 5 = MQTT 5
+        assert_eq!(pkt[9], CONNECT_FLAGS_CLEAN_SESSION);
+        assert_eq!(&pkt[10..12], &30u16.to_be_bytes());
+        assert_eq!(pkt[12], 0x00); // properties length = 0
+        assert_eq!(&pkt[13..15], &1u16.to_be_bytes());
+        assert_eq!(pkt[15], b'a');
+    }
+
+    #[test]
+    fn validate_connack_v5_with_properties_tail_is_accepted() {
+        // A v5 broker may put a Properties section after the reason
+        // code. validate_connack only inspects body[0..2], so the
+        // tail bytes don't matter for our success check.
+        let p = MqttPacket {
+            packet_type: TYPE_CONNACK,
+            body: vec![0x00, 0x00, 0x05, 0x11, 0x00, 0x00, 0x00, 0x10],
+        };
+        validate_connack(&p).unwrap();
     }
 
     fn read_one(bytes: Vec<u8>) -> MqttPacket {

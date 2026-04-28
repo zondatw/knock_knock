@@ -344,6 +344,23 @@ fn mqtt_pinger_fails_on_closed_port() {
 }
 
 #[test]
+fn mqtt_pinger_v5_succeeds_against_test_broker() {
+    let addr = testserver::start_mqtt_ok("127.0.0.1:0").unwrap();
+    let p =
+        zpinger::MqttPinger::new(format!("mqtt://{addr}")).with_version(zpinger::MqttVersion::V5);
+    p.ping().unwrap();
+}
+
+#[test]
+fn mqtts_pinger_v5_succeeds_with_trusted_cert() {
+    let server = testserver::start_mqtts_ok("127.0.0.1:0").unwrap();
+    let p = zpinger::MqttPinger::new(format!("mqtts://localhost:{}", server.addr.port()))
+        .with_version(zpinger::MqttVersion::V5)
+        .with_tls_config(server.client_config);
+    p.ping().unwrap();
+}
+
+#[test]
 fn mqtt_pinger_usable_as_trait_object() {
     let addr = testserver::start_mqtt_ok("127.0.0.1:0").unwrap();
     let p: Box<dyn Pinger> = Box::new(zpinger::MqttPinger::new(format!("mqtt://{addr}")));

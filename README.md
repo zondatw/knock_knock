@@ -123,9 +123,10 @@ Commands:
         plus a control PING/PONG round trip
   dns   DNS ping (UDP/53 default) — sends one query and validates the
         response
-  mqtt  MQTT 3.1.1 ping (mqtt:// or mqtts://) — runs CONNECT/CONNACK
-        plus a PINGREQ/PINGRESP control round trip, then DISCONNECT.
-        Default port 1883 plain, 8883 TLS.
+  mqtt  MQTT 3.1.1 (default) or MQTT 5 ping (mqtt:// or mqtts://) —
+        runs CONNECT/CONNACK plus a PINGREQ/PINGRESP control round
+        trip, then DISCONNECT. Pass --v5 for MQTT 5. Default port
+        1883 plain, 8883 TLS.
 
 Options:
   -c, --count <COUNT>  ping times [default: 3]
@@ -143,6 +144,7 @@ $ knockknock ws wss://echo.websocket.events/
 $ knockknock dns 8.8.8.8 -q example.com
 $ knockknock dns 1.1.1.1 -q example.com -t aaaa
 $ knockknock mqtt mqtt://broker.hivemq.com
+$ knockknock mqtt mqtt://broker.hivemq.com --v5
 $ knockknock mqtt mqtts://broker.example.com:8883 --client-id custom
 ```
 

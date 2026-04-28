@@ -2,7 +2,9 @@ use clap::{Parser, Subcommand, ValueEnum};
 use colored::*;
 use std::io::Result;
 use std::time::Duration;
-use zpinger::{DnsPinger, HttpPinger, MqttPinger, Pinger, TcpPinger, UdpPinger, WebSocketPinger};
+use zpinger::{
+    DnsPinger, HttpPinger, MqttPinger, MqttVersion, Pinger, TcpPinger, UdpPinger, WebSocketPinger,
+};
 
 #[derive(Parser)]
 #[command(name = "knockknock", version, about = "CLI tool for ping protocols")]
@@ -55,6 +57,9 @@ enum Command {
         /// Defaults to `knockknock-<random>`.
         #[arg(long)]
         client_id: Option<String>,
+        /// Speak MQTT 5 instead of the default MQTT 3.1.1.
+        #[arg(long)]
+        v5: bool,
     },
 }
 
@@ -165,10 +170,17 @@ fn build_pinger(command: &Command) -> Box<dyn Pinger> {
         } => Box::new(
             DnsPinger::new(server.clone(), query.clone()).with_record_type((*record_type).into()),
         ),
-        Command::Mqtt { broker, client_id } => {
+        Command::Mqtt {
+            broker,
+            client_id,
+            v5,
+        } => {
             let mut p = MqttPinger::new(broker.clone());
             if let Some(cid) = client_id {
                 p = p.with_client_id(cid.clone());
+            }
+            if *v5 {
+                p = p.with_version(MqttVersion::V5);
             }
             Box::new(p)
         }
@@ -355,6 +367,7 @@ mod tests {
                 "--client-id",
                 "custom",
             ],
+            &["knockknock", "mqtt", "mqtt://localhost:1883", "--v5"],
         ];
         for args in cases {
             let cli = parse(args);
@@ -426,9 +439,14 @@ mod tests {
     fn parses_mqtt_subcommand_default_client_id() {
         let cli = parse(&["knockknock", "mqtt", "mqtt://localhost:1883"]);
         match &cli.command {
-            Command::Mqtt { broker, client_id } => {
+            Command::Mqtt {
+                broker,
+                client_id,
+                v5,
+            } => {
                 assert_eq!(broker, "mqtt://localhost:1883");
                 assert!(client_id.is_none());
+                assert!(!v5, "default should be MQTT 3.1.1");
             }
             other => panic!("expected Mqtt, got {:?}", std::mem::discriminant(other)),
         }
@@ -444,10 +462,21 @@ mod tests {
             "test-client",
         ]);
         match &cli.command {
-            Command::Mqtt { broker, client_id } => {
+            Command::Mqtt {
+                broker, client_id, ..
+            } => {
                 assert_eq!(broker, "mqtts://broker.example.com:8883");
                 assert_eq!(client_id.as_deref(), Some("test-client"));
             }
+            other => panic!("expected Mqtt, got {:?}", std::mem::discriminant(other)),
+        }
+    }
+
+    #[test]
+    fn parses_mqtt_subcommand_with_v5_flag() {
+        let cli = parse(&["knockknock", "mqtt", "mqtt://broker.example.com", "--v5"]);
+        match &cli.command {
+            Command::Mqtt { v5, .. } => assert!(v5),
             other => panic!("expected Mqtt, got {:?}", std::mem::discriminant(other)),
         }
     }

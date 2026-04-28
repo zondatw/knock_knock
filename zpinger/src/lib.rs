@@ -16,7 +16,7 @@ mod websocket;
 pub use crate::dns::{DnsPinger, RecordType};
 pub use crate::http::{HttpMethod, HttpPinger};
 pub use crate::level4::{TcpPinger, UdpPinger};
-pub use crate::mqtt::MqttPinger;
+pub use crate::mqtt::{MqttPinger, MqttVersion};
 pub use crate::pinger::{timed, Pinger};
 pub use crate::tls::default_client_config;
 pub use crate::websocket::WebSocketPinger;

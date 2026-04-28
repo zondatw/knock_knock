@@ -8,15 +8,20 @@ version of each published crate.
 ## [Unreleased]
 
 ### Added
-- **MQTT pinger** (`zpinger::MqttPinger`). Sync, zero new external
-  deps, hand-rolled MQTT 3.1.1 (CONNECT/CONNACK + PINGREQ/PINGRESP
-  + DISCONNECT). Builder mirrors the other pingers
+- **MQTT pinger** (`zpinger::MqttPinger`, `MqttVersion`). Sync,
+  zero new external deps, hand-rolled MQTT (CONNECT/CONNACK +
+  PINGREQ/PINGRESP + DISCONNECT) with both **MQTT 3.1.1 (default)**
+  and **MQTT 5** wire formats. Builder mirrors the other pingers
   (`::new(server)`, `.with_client_id(s)`, `.with_keepalive(n)`,
-  `.with_timeout(d)`, `.with_tls_config(c)`). Default port 1883
-  plain, 8883 TLS; `mqtts://` reuses the rustls + webpki-roots
-  layer from PR 8. Validation: CONNACK has return code 0, PINGRESP
-  is the right packet type with no payload.
-- `knockknock mqtt <broker> [--client-id ID]` subcommand.
+  `.with_timeout(d)`, `.with_version(MqttVersion::V5)`,
+  `.with_tls_config(c)`). Default port 1883 plain, 8883 TLS;
+  `mqtts://` reuses the rustls + webpki-roots layer from PR 8.
+  Validation: CONNACK has return / reason code 0 (works for both
+  versions because the success byte is at the same offset),
+  PINGRESP is the right packet type with no payload. v5 CONNECT
+  packets emit the mandatory empty Properties section
+  (RFC §3.1.2.11).
+- `knockknock mqtt <broker> [--client-id ID] [--v5]` subcommand.
 - `testserver::start_mqtt_ok` / `start_mqtts_ok` and
   `testserver --mqtt <port>` (default 18005) — minimal in-process
   broker that accepts CONNECT, replies CONNACK rc=0, replies to

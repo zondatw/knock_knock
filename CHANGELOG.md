@@ -8,6 +8,21 @@ version of each published crate.
 ## [Unreleased]
 
 ### Added
+- **MQTT pinger** (`zpinger::MqttPinger`). Sync, zero new external
+  deps, hand-rolled MQTT 3.1.1 (CONNECT/CONNACK + PINGREQ/PINGRESP
+  + DISCONNECT). Builder mirrors the other pingers
+  (`::new(server)`, `.with_client_id(s)`, `.with_keepalive(n)`,
+  `.with_timeout(d)`, `.with_tls_config(c)`). Default port 1883
+  plain, 8883 TLS; `mqtts://` reuses the rustls + webpki-roots
+  layer from PR 8. Validation: CONNACK has return code 0, PINGRESP
+  is the right packet type with no payload.
+- `knockknock mqtt <broker> [--client-id ID]` subcommand.
+- `testserver::start_mqtt_ok` / `start_mqtts_ok` and
+  `testserver --mqtt <port>` (default 18005) — minimal in-process
+  broker that accepts CONNECT, replies CONNACK rc=0, replies to
+  PINGREQ with PINGRESP, exits on DISCONNECT. The TLS variant
+  reuses the same self-signed-cert + injected-trust-anchor model
+  as `start_https_ok` / `start_wss_ok`.
 - **DNS pinger** (`zpinger::DnsPinger`, `RecordType` enum). Sends one
   UDP query (RFC 1035 wire format, hand-rolled — no external DNS
   crate) and validates the response: matching 16-bit ID, QR bit
@@ -21,6 +36,12 @@ version of each published crate.
   schemeless URLs; default port 53.
 - `testserver::start_dns_ok` and `testserver --dns <port>` (default
   18004) for end-to-end testing without any external resolver.
+
+### Changed
+- `testserver`'s self-signed TLS cert generation is now a single
+  internal helper (`make_test_tls_pair`) shared by `start_https_ok`,
+  `start_wss_ok`, and `start_mqtts_ok` — previously it was
+  duplicated per-protocol.
 
 ### Fixed
 - DNS subcommand's "DNS lookup:" CLI banner now resolves with the

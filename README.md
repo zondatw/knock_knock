@@ -88,6 +88,7 @@ $ cargo run -p testserver
 [http] listening on 0.0.0.0:18002
 [ws]   listening on 0.0.0.0:18003
 [dns]  listening on 0.0.0.0:18004
+[mqtt] listening on 0.0.0.0:18005
 
 Try in another terminal:
   knockknock tcp localhost:18000
@@ -95,13 +96,14 @@ Try in another terminal:
   knockknock http get localhost:18002/anything
   knockknock ws ws://localhost:18003/
   knockknock dns 127.0.0.1:18004 -q example.com
+  knockknock mqtt mqtt://localhost:18005
 ```
 
 If the default ports are taken, override them (use `0` for an OS-picked
 ephemeral port, or pass any specific number):
 
 ```shell
-$ cargo run -p testserver -- --tcp 0 --udp 0 --http 0 --ws 0 --dns 0 --bind 127.0.0.1
+$ cargo run -p testserver -- --tcp 0 --udp 0 --http 0 --ws 0 --dns 0 --mqtt 0 --bind 127.0.0.1
 ```
 
 The same servers are used by `zpinger`'s integration tests, so
@@ -121,6 +123,9 @@ Commands:
         plus a control PING/PONG round trip
   dns   DNS ping (UDP/53 default) — sends one query and validates the
         response
+  mqtt  MQTT 3.1.1 ping (mqtt:// or mqtts://) — runs CONNECT/CONNACK
+        plus a PINGREQ/PINGRESP control round trip, then DISCONNECT.
+        Default port 1883 plain, 8883 TLS.
 
 Options:
   -c, --count <COUNT>  ping times [default: 3]
@@ -137,6 +142,8 @@ $ knockknock ws ws://localhost:18003/
 $ knockknock ws wss://echo.websocket.events/
 $ knockknock dns 8.8.8.8 -q example.com
 $ knockknock dns 1.1.1.1 -q example.com -t aaaa
+$ knockknock mqtt mqtt://broker.hivemq.com
+$ knockknock mqtt mqtts://broker.example.com:8883 --client-id custom
 ```
 
 ### Ping TCP path

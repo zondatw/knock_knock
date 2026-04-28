@@ -68,11 +68,12 @@ pub struct HttpsServer {
     pub client_config: Arc<ClientConfig>,
 }
 
-/// Spin up an HTTPS 200-OK responder on `addr` using a freshly
-/// generated self-signed cert for the SAN `localhost`. Returns the
-/// bound address and a `ClientConfig` pre-loaded with the cert as a
-/// trust anchor.
-pub fn start_https_ok<A: ToSocketAddrs>(addr: A) -> Result<HttpsServer> {
+/// Generate a fresh self-signed cert for SAN `localhost` and return
+/// the matching `ServerConfig` (for the listener side) plus a
+/// `ClientConfig` whose only trust anchor is that cert (for the
+/// client side). Used by every TLS-wrapped test endpoint —
+/// `start_https_ok`, `start_wss_ok`, `start_mqtts_ok`.
+fn make_test_tls_pair() -> Result<(Arc<ServerConfig>, Arc<ClientConfig>)> {
     let issued = rcgen::generate_simple_self_signed(vec!["localhost".to_string()])
         .map_err(|e| std::io::Error::other(format!("rcgen: {e}")))?;
     let cert_der = CertificateDer::from(issued.cert.der().to_vec());
@@ -86,7 +87,6 @@ pub fn start_https_ok<A: ToSocketAddrs>(addr: A) -> Result<HttpsServer> {
         .with_no_client_auth()
         .with_single_cert(vec![cert_der.clone()], key_der)
         .map_err(|e| std::io::Error::other(format!("rustls server cert: {e}")))?;
-    let server_config = Arc::new(server_config);
 
     let mut roots = RootCertStore::empty();
     roots
@@ -97,8 +97,16 @@ pub fn start_https_ok<A: ToSocketAddrs>(addr: A) -> Result<HttpsServer> {
         .map_err(|e| std::io::Error::other(format!("rustls protocol: {e}")))?
         .with_root_certificates(roots)
         .with_no_client_auth();
-    let client_config = Arc::new(client_config);
 
+    Ok((Arc::new(server_config), Arc::new(client_config)))
+}
+
+/// Spin up an HTTPS 200-OK responder on `addr` using a freshly
+/// generated self-signed cert for the SAN `localhost`. Returns the
+/// bound address and a `ClientConfig` pre-loaded with the cert as a
+/// trust anchor.
+pub fn start_https_ok<A: ToSocketAddrs>(addr: A) -> Result<HttpsServer> {
+    let (server_config, client_config) = make_test_tls_pair()?;
     let listener = TcpListener::bind(addr)?;
     let bound = listener.local_addr()?;
 
@@ -188,32 +196,7 @@ pub fn start_ws_ok<A: ToSocketAddrs>(addr: A) -> Result<SocketAddr> {
 /// trusts the freshly-generated self-signed cert (and only that
 /// cert) — same shape as `start_https_ok`.
 pub fn start_wss_ok<A: ToSocketAddrs>(addr: A) -> Result<HttpsServer> {
-    let issued = rcgen::generate_simple_self_signed(vec!["localhost".to_string()])
-        .map_err(|e| std::io::Error::other(format!("rcgen: {e}")))?;
-    let cert_der = CertificateDer::from(issued.cert.der().to_vec());
-    let key_der = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(issued.key_pair.serialize_der()));
-
-    let provider = Arc::new(rustls::crypto::ring::default_provider());
-
-    let server_config = ServerConfig::builder_with_provider(provider.clone())
-        .with_safe_default_protocol_versions()
-        .map_err(|e| std::io::Error::other(format!("rustls protocol: {e}")))?
-        .with_no_client_auth()
-        .with_single_cert(vec![cert_der.clone()], key_der)
-        .map_err(|e| std::io::Error::other(format!("rustls server cert: {e}")))?;
-    let server_config = Arc::new(server_config);
-
-    let mut roots = RootCertStore::empty();
-    roots
-        .add(cert_der)
-        .map_err(|e| std::io::Error::other(format!("trust anchor: {e}")))?;
-    let client_config = ClientConfig::builder_with_provider(provider)
-        .with_safe_default_protocol_versions()
-        .map_err(|e| std::io::Error::other(format!("rustls protocol: {e}")))?
-        .with_root_certificates(roots)
-        .with_no_client_auth();
-    let client_config = Arc::new(client_config);
-
+    let (server_config, client_config) = make_test_tls_pair()?;
     let listener = TcpListener::bind(addr)?;
     let bound = listener.local_addr()?;
 
@@ -241,6 +224,123 @@ pub fn start_wss_ok<A: ToSocketAddrs>(addr: A) -> Result<HttpsServer> {
                             _ => {}
                         }
                     }
+                });
+            }
+        });
+    }
+
+    Ok(HttpsServer {
+        addr: bound,
+        client_config,
+    })
+}
+
+/// Read a single MQTT control packet from `stream`. Returns
+/// `(packet_type, body)`. Supports the same 4-byte variable-byte-int
+/// remaining-length encoding the client side uses.
+fn read_mqtt_packet<S: Read>(stream: &mut S) -> Result<(u8, Vec<u8>)> {
+    let mut header = [0u8; 1];
+    stream.read_exact(&mut header)?;
+    let mut multiplier: usize = 1;
+    let mut remaining: usize = 0;
+    for _ in 0..4 {
+        let mut byte = [0u8; 1];
+        stream.read_exact(&mut byte)?;
+        let b = byte[0];
+        remaining += (b & 0x7F) as usize * multiplier;
+        if b & 0x80 == 0 {
+            let mut body = vec![0u8; remaining];
+            if remaining > 0 {
+                stream.read_exact(&mut body)?;
+            }
+            return Ok((header[0], body));
+        }
+        multiplier = multiplier.saturating_mul(128);
+    }
+    Err(std::io::Error::other(
+        "MQTT remaining-length varint exceeds 4 bytes",
+    ))
+}
+
+/// Drive a minimal MQTT 3.1.1 broker session over an established
+/// stream: accept CONNECT, return CONNACK with return-code 0, reply
+/// to PINGREQ with PINGRESP, and exit cleanly on DISCONNECT or any
+/// other packet type. Errors close the connection.
+fn handle_mqtt_session<S: Read + Write>(mut stream: S) {
+    // First packet must be CONNECT (0x10). We don't validate the body,
+    // we just need to send a CONNACK back.
+    let (first_type, _body) = match read_mqtt_packet(&mut stream) {
+        Ok(p) => p,
+        Err(_) => return,
+    };
+    if first_type & 0xF0 != 0x10 {
+        return;
+    }
+    // CONNACK: type 0x20, remaining length 2, flags 0, return code 0
+    if stream.write_all(&[0x20, 0x02, 0x00, 0x00]).is_err() {
+        return;
+    }
+
+    loop {
+        let (packet_type, _body) = match read_mqtt_packet(&mut stream) {
+            Ok(p) => p,
+            Err(_) => return,
+        };
+        match packet_type & 0xF0 {
+            0xC0 => {
+                // PINGREQ -> PINGRESP
+                if stream.write_all(&[0xD0, 0x00]).is_err() {
+                    return;
+                }
+            }
+            0xE0 => {
+                // DISCONNECT
+                return;
+            }
+            _ => {
+                // Unknown / unsupported packet type — disconnect.
+                return;
+            }
+        }
+    }
+}
+
+/// Spin up a minimal MQTT 3.1.1 broker on `addr`. Accepts the
+/// CONNECT / CONNACK handshake, replies to PINGREQ with PINGRESP,
+/// closes on DISCONNECT. No subscriptions, no PUBLISH support — just
+/// enough to drive `MqttPinger` end-to-end.
+pub fn start_mqtt_ok<A: ToSocketAddrs>(addr: A) -> Result<SocketAddr> {
+    let listener = TcpListener::bind(addr)?;
+    let bound = listener.local_addr()?;
+    thread::spawn(move || {
+        for stream in listener.incoming().flatten() {
+            thread::spawn(move || handle_mqtt_session(stream));
+        }
+    });
+    Ok(bound)
+}
+
+/// TLS-wrapped variant of `start_mqtt_ok` for `mqtts://` clients.
+/// Returns the bound address plus a `ClientConfig` that trusts the
+/// freshly-generated self-signed cert (and only that cert) — same
+/// shape as `start_https_ok` / `start_wss_ok`.
+pub fn start_mqtts_ok<A: ToSocketAddrs>(addr: A) -> Result<HttpsServer> {
+    let (server_config, client_config) = make_test_tls_pair()?;
+    let listener = TcpListener::bind(addr)?;
+    let bound = listener.local_addr()?;
+
+    {
+        let server_config = Arc::clone(&server_config);
+        thread::spawn(move || {
+            for stream in listener.incoming().flatten() {
+                let cfg = Arc::clone(&server_config);
+                thread::spawn(move || {
+                    let conn = match ServerConnection::new(cfg) {
+                        Ok(c) => c,
+                        Err(_) => return,
+                    };
+                    let tls = StreamOwned::new(conn, stream);
+                    handle_mqtt_session(tls);
                 });
             }
         });

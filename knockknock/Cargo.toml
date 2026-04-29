@@ -1,6 +1,6 @@
 [package]
 name = "knockknock"
-version = "1.4.0"
+version = "1.5.0"
 authors = ["Zonda Yang <u226699@gmail.com>"]
 description = "CLI tool for ping protocols"
 homepage = "https://github.com/zondatw/knock_knock"
@@ -15,7 +15,7 @@ default = []
 mcp = ["dep:rmcp", "dep:schemars", "dep:serde", "dep:serde_json"]
 
 [dependencies]
-zpinger = { path = "../zpinger", version = "0.4.0" }
+zpinger = { path = "../zpinger", version = "0.5.0" }
 clap = { version = "4", features = ["derive"] }
 colored = "3"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-std"] }

@@ -1,5 +1,25 @@
 # Knock Knock
 
+A protocol-agnostic latency probe. Measures real round-trip time across
+the application layer of every supported protocol — not just whether
+a TCP socket opens, but whether the actual handshake / RPC completes.
+
+| Subcommand | Schemes / inputs                                    | What's measured                                                |
+| ---------- | --------------------------------------------------- | -------------------------------------------------------------- |
+| `tcp`      | `host:port`                                         | TCP connect + 1-byte probe + read                              |
+| `udp`      | `host:port`                                         | UDP send + recv from ephemeral local socket                    |
+| `http`     | `http://`, `https://` (auto via scheme)             | Full HTTP/1.1 request + status-line validation                 |
+| `ws`       | `ws://`, `wss://`                                   | RFC 6455 upgrade + control PING/PONG round trip                |
+| `dns`      | host or host:port (default port 53)                 | UDP query + response validation (ID, QR, RCODE, question echo) |
+| `mqtt`     | `mqtt://`, `mqtts://` (`--v5` for MQTT 5)           | CONNECT/CONNACK + PINGREQ/PINGRESP + DISCONNECT                |
+| `grpc`     | `grpc://` / `http://` plaintext, `grpcs://` / `https://` TLS | `grpc.health.v1.Health/Check` unary RPC                |
+
+TLS for `https` / `wss` / `mqtts` / `grpcs` is handled by
+[`rustls`](https://github.com/rustls/rustls) with the Mozilla root CA
+bundle from
+[`webpki-roots`](https://github.com/rustls/webpki-roots) — pure Rust,
+no system trust store dependency.
+
 ## Cargo
 
 ```shell
@@ -77,9 +97,11 @@ binary upload jobs only need the default `GITHUB_TOKEN`.
 
 ## Local test server
 
-A small companion binary `testserver` provides TCP echo, UDP echo, and a
-minimal HTTP 200-OK responder so you can exercise every pinger end-to-end
-without depending on external services.
+A small companion binary `testserver` provides a local endpoint for
+**every** supported protocol so you can exercise every pinger
+end-to-end without depending on external services. The same servers
+power `zpinger`'s integration suite, so `cargo test` covers every
+protocol against a real socket without manual setup.
 
 ```shell
 $ cargo run -p testserver
@@ -108,10 +130,6 @@ ephemeral port, or pass any specific number):
 $ cargo run -p testserver -- --tcp 0 --udp 0 --http 0 --ws 0 --dns 0 --mqtt 0 --grpc 0 --bind 127.0.0.1
 ```
 
-The same servers are used by `zpinger`'s integration tests, so
-`cargo test` already exercises every protocol against a real socket
-without any manual setup.
-
 ## Execution
 
 ```shell
@@ -137,60 +155,61 @@ Options:
   -c, --count <COUNT>  ping times [default: 3]
 ```
 
-`http` accepts both `http://` and `https://` targets — TLS handshakes
-are handled by [`rustls`](https://github.com/rustls/rustls) with the
-Mozilla root CA bundle from `webpki-roots`, no system trust store
-required:
+Output shape is the same across every protocol:
 
-```shell
-$ knockknock http get https://example.com:443/
-$ knockknock ws ws://localhost:18003/
-$ knockknock ws wss://echo.websocket.events/
-$ knockknock dns 8.8.8.8 -q example.com
-$ knockknock dns 1.1.1.1 -q example.com -t aaaa
-$ knockknock mqtt mqtt://broker.hivemq.com
-$ knockknock mqtt mqtt://broker.hivemq.com --v5
-$ knockknock mqtt mqtts://broker.example.com:8883 --client-id custom
-$ knockknock grpc grpc://localhost:50051
-$ knockknock grpc grpcs://api.example.com:443 --service my.Svc
-```
-
-### Ping TCP path
-
-```shell
-$ knockknock tcp localhost:8000 -c 3
-DNS lookup: [[::1]:8000, 127.0.0.1:8000]
-localhost:8000: time=   0.86718 ms
-localhost:8000: fail
-localhost:8000: fail
+```text
+DNS lookup: [...]                       # informational; resolve target → IPs
+<target>: time=  X.XXXXX ms              # one line per successful ping
+<target>: fail                           # one line per failed ping
 ----- statistic -----
-total time: 867.183µs
-Connect time: 3, recv time: 1 (33%), lose time: 2 (66%)
+total time: <sum of successes>
+Connect time: N, recv time: M (X%), lose time: K (Y%)
 ```
 
-### Ping UDP path
+`time=` is what was actually measured: full handshake + payload exchange
+for each protocol, from the moment `ping()` is called to the moment
+the server responds (and, where applicable, the close completes).
+
+### TCP
 
 ```shell
-$ knockknock udp localhost:12000
-DNS lookup: [[::1]:12000, 127.0.0.1:12000]
-localhost:12000: time=   0.90438 ms
-localhost:12000: fail
-localhost:12000: fail
+$ knockknock tcp localhost:18000 -c 3
+DNS lookup: [[::1]:18000, 127.0.0.1:18000]
+localhost:18000: time=   0.71271 ms
+localhost:18000: time=   0.40504 ms
+localhost:18000: time=   0.36213 ms
 ----- statistic -----
-total time: 904.381µs
-Connect time: 3, recv time: 1 (33%), lose time: 2 (66%)
+total time: 1.479880ms
+Connect time: 3, recv time: 3 (100%), lose time: 0 (0%)
 ```
 
-### Ping HTTP path
+### UDP
+
+```shell
+$ knockknock udp localhost:18001 -c 3
+DNS lookup: [[::1]:18001, 127.0.0.1:18001]
+localhost:18001: time=   0.67254 ms
+localhost:18001: time=   0.46717 ms
+localhost:18001: time=   0.41892 ms
+----- statistic -----
+total time: 1.558630ms
+Connect time: 3, recv time: 3 (100%), lose time: 0 (0%)
+```
+
+### HTTP
+
+`http` takes a method subcommand. Schemes:
+- `http://` (or no scheme)  → plaintext, default port 80
+- `https://`                → TLS, default port 443
 
 #### CONNECT
 
 ```shell
-$ knockknock http connect localhost:8888/haha
-DNS lookup: [[::1]:8888, 127.0.0.1:8888]
-localhost:8888/haha: time=   2.54041 ms
-localhost:8888/haha: time=   2.61254 ms
-localhost:8888/haha: time=   3.63613 ms
+$ knockknock http connect localhost:18002/anything
+DNS lookup: [[::1]:18002, 127.0.0.1:18002]
+localhost:18002/anything: time=   2.54041 ms
+localhost:18002/anything: time=   2.61254 ms
+localhost:18002/anything: time=   3.63613 ms
 ----- statistic -----
 total time: 8.789084ms
 Connect time: 3, recv time: 3 (100%), lose time: 0 (0%)
@@ -199,64 +218,228 @@ Connect time: 3, recv time: 3 (100%), lose time: 0 (0%)
 #### GET
 
 ```shell
-$ knockknock http get localhost:8888/haha
-DNS lookup: [[::1]:8888, 127.0.0.1:8888]
-localhost:8888/haha: time=   2.54041 ms
-localhost:8888/haha: time=   2.61254 ms
-localhost:8888/haha: time=   3.63613 ms
------ statistic -----
-total time: 8.789084ms
-Connect time: 3, recv time: 3 (100%), lose time: 0 (0%)
+$ knockknock http get localhost:18002/anything
 ```
 
 #### POST
 
 ```shell
-$ knockknock http post localhost:8888/haha
-DNS lookup: [[::1]:8888, 127.0.0.1:8888]
-localhost:8888/haha: time=   2.54041 ms
-localhost:8888/haha: time=   2.61254 ms
-localhost:8888/haha: time=   3.63613 ms
------ statistic -----
-total time: 8.789084ms
-Connect time: 3, recv time: 3 (100%), lose time: 0 (0%)
+$ knockknock http post localhost:18002/anything
 ```
 
 #### PUT
 
 ```shell
-$ knockknock http put localhost:8888/haha
-DNS lookup: [[::1]:8888, 127.0.0.1:8888]
-localhost:8888/haha: time=   2.54041 ms
-localhost:8888/haha: time=   2.61254 ms
-localhost:8888/haha: time=   3.63613 ms
------ statistic -----
-total time: 8.789084ms
-Connect time: 3, recv time: 3 (100%), lose time: 0 (0%)
+$ knockknock http put localhost:18002/anything
 ```
 
 #### DELETE
 
 ```shell
-$ knockknock http delete localhost:8888/haha
-DNS lookup: [[::1]:8888, 127.0.0.1:8888]
-localhost:8888/haha: time=   2.54041 ms
-localhost:8888/haha: time=   2.61254 ms
-localhost:8888/haha: time=   3.63613 ms
------ statistic -----
-total time: 8.789084ms
-Connect time: 3, recv time: 3 (100%), lose time: 0 (0%)
+$ knockknock http delete localhost:18002/anything
 ```
 
 #### PATCH
 
 ```shell
-$ knockknock http patch localhost:8888/haha
-DNS lookup: [[::1]:8888, 127.0.0.1:8888]
-localhost:8888/haha: time=   2.54041 ms
-localhost:8888/haha: time=   2.61254 ms
-localhost:8888/haha: time=   3.63613 ms
+$ knockknock http patch localhost:18002/anything
+```
+
+#### HTTPS
+
+Same `http` subcommand, just point at an `https://` URL. TLS handshake
+is included in the measured time:
+
+```shell
+$ knockknock http get https://www.google.com -c 3
+DNS lookup: [142.251.155.119:443, 142.251.157.119:443, ...]
+https://www.google.com: time=  97.12188 ms
+https://www.google.com: time= 104.15767 ms
+https://www.google.com: time= 113.83992 ms
 ----- statistic -----
-total time: 8.789084ms
+total time: 315.119459ms
 Connect time: 3, recv time: 3 (100%), lose time: 0 (0%)
 ```
+
+### WebSocket
+
+`ws` runs the full RFC 6455 upgrade handshake **plus** a control
+PING/PONG round trip on each iteration, so `time=` includes both
+connection setup and the steady-state frame-layer RTT.
+
+#### ws://
+
+```shell
+$ knockknock ws ws://localhost:18003/ -c 3
+DNS lookup: [[::1]:18003, 127.0.0.1:18003]
+ws://localhost:18003/: time=   4.55317 ms
+ws://localhost:18003/: time=   4.35833 ms
+ws://localhost:18003/: time=   4.21008 ms
+----- statistic -----
+total time: 13.121580ms
+Connect time: 3, recv time: 3 (100%), lose time: 0 (0%)
+```
+
+#### wss:// (against a public echo server)
+
+```shell
+$ knockknock ws wss://echo.websocket.events/ -c 3
+```
+
+### DNS
+
+Sends one UDP query (RFC 1035, hand-rolled wire format) to the resolver
+and validates: response ID matches, QR bit set, RCODE = 0, QDCOUNT = 1,
+question section echoed byte-for-byte from the request. Default port 53.
+
+`-q <name>` is required; `-t <type>` defaults to `a`. Supported types:
+`a`, `aaaa`, `cname`, `mx`, `ns`, `txt`.
+
+#### Public resolver (A record)
+
+```shell
+$ knockknock dns 8.8.8.8 -q example.com -c 3
+DNS lookup: [8.8.8.8:53]
+8.8.8.8: time=  17.92217 ms
+8.8.8.8: time=  23.98338 ms
+8.8.8.8: time=  20.41122 ms
+----- statistic -----
+total time: 62.316770ms
+Connect time: 3, recv time: 3 (100%), lose time: 0 (0%)
+```
+
+#### Different record types
+
+```shell
+$ knockknock dns 1.1.1.1 -q example.com -t aaaa
+$ knockknock dns 1.1.1.1 -q example.com -t mx
+$ knockknock dns 1.1.1.1 -q example.com -t txt
+```
+
+#### Custom port (e.g. local resolver)
+
+```shell
+$ knockknock dns 127.0.0.1:18004 -q example.com -c 3
+```
+
+### MQTT
+
+Runs CONNECT → CONNACK → PINGREQ → PINGRESP → DISCONNECT. The full
+session is included in the measured time.
+
+`--v5` switches the wire format to MQTT 5 (sends protocol-level byte 5
+plus the mandatory empty Properties section in CONNECT). Default is
+MQTT 3.1.1.
+
+`--client-id <id>` overrides the auto-generated client ID.
+
+#### mqtt://
+
+```shell
+$ knockknock mqtt mqtt://localhost:18005 -c 3
+DNS lookup: [[::1]:18005, 127.0.0.1:18005]
+mqtt://localhost:18005: time=   3.86383 ms
+mqtt://localhost:18005: time=   3.87321 ms
+mqtt://localhost:18005: time=   3.71298 ms
+----- statistic -----
+total time: 11.450020ms
+Connect time: 3, recv time: 3 (100%), lose time: 0 (0%)
+```
+
+#### MQTT 5
+
+```shell
+$ knockknock mqtt mqtt://localhost:18005 --v5 -c 3
+```
+
+#### mqtts:// (TLS)
+
+```shell
+$ knockknock mqtt mqtts://broker.example.com:8883 -c 3
+```
+
+#### Custom client id
+
+```shell
+$ knockknock mqtt mqtt://broker.hivemq.com --client-id my-client-id
+```
+
+### gRPC
+
+Calls the standard
+[gRPC Health Checking Protocol](https://github.com/grpc/grpc/blob/master/doc/health-checking.md)
+`grpc.health.v1.Health/Check` unary RPC. The pinger reports success
+only when the server returns `SERVING`.
+
+Schemes:
+- `grpc://`  or `http://`   → plaintext H2C
+- `grpcs://` or `https://`  → TLS
+- bare `host:port`          → defaults to plaintext H2C
+
+`--service <name>` checks a specific service (default empty = overall
+server health).
+
+#### Plaintext (grpc://)
+
+```shell
+$ knockknock grpc grpc://localhost:18006 -c 3
+DNS lookup: [[::1]:18006, 127.0.0.1:18006]
+grpc://localhost:18006: time=   7.00425 ms
+grpc://localhost:18006: time=   5.21879 ms
+grpc://localhost:18006: time=   6.41346 ms
+----- statistic -----
+total time: 18.636499ms
+Connect time: 3, recv time: 3 (100%), lose time: 0 (0%)
+```
+
+#### TLS (grpcs://)
+
+```shell
+$ knockknock grpc grpcs://api.example.com:443 -c 3
+```
+
+#### Specific service
+
+```shell
+$ knockknock grpc grpc://localhost:18006 --service my.package.Service
+```
+
+## Library usage (`zpinger`)
+
+`zpinger` is published on crates.io and exposes the same protocols as a
+Rust library. The single contract is the async `Pinger` trait:
+
+```rust
+use std::time::Duration;
+use zpinger::{HttpMethod, HttpPinger, Pinger, TcpPinger, timed};
+
+#[tokio::main]
+async fn main() -> std::io::Result<()> {
+    // TCP — measure connect + 1-byte probe RTT.
+    let p = TcpPinger::new("example.com:80").with_timeout(Duration::from_secs(2));
+    let elapsed = timed(&p).await?;
+    println!("TCP RTT: {elapsed:?}");
+
+    // HTTP GET — full request + response RTT, https path uses webpki-roots.
+    let p = HttpPinger::new(HttpMethod::Get, "https://example.com:443/");
+    let elapsed = timed(&p).await?;
+    println!("HTTPS GET RTT: {elapsed:?}");
+
+    // Heterogeneous dispatch via Box<dyn Pinger>.
+    let pingers: Vec<Box<dyn Pinger>> = vec![
+        Box::new(TcpPinger::new("example.com:80")),
+        Box::new(HttpPinger::new(HttpMethod::Get, "https://example.com:443/")),
+    ];
+    for p in &pingers {
+        let _ = timed(p.as_ref()).await;
+    }
+
+    Ok(())
+}
+```
+
+Every pinger struct (`TcpPinger`, `UdpPinger`, `HttpPinger`,
+`WebSocketPinger`, `DnsPinger`, `MqttPinger`, `GrpcPinger`) follows the
+same `::new(target).with_*(opts)` builder shape. See each module's
+docs and the integration tests in `zpinger/tests/integration.rs` for
+worked examples.

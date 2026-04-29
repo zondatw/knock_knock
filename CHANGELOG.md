@@ -7,6 +7,8 @@ version of each published crate.
 
 ## [Unreleased]
 
+## [1.4.0] / zpinger 0.4.0 — 2026-04-29
+
 ### Added
 - **`knockknock-mcp` binary** — Model Context Protocol server
   exposing every pinger as a typed tool over stdio, gated behind the

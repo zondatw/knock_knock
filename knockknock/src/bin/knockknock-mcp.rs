@@ -20,8 +20,8 @@ use rmcp::{
 };
 use serde::{Deserialize, Serialize};
 use zpinger::{
-    DnsPinger, GrpcPinger, HttpMethod, HttpPinger, MqttPinger, MqttVersion, Pinger, RecordType,
-    TcpPinger, UdpPinger, WebSocketPinger,
+    DnsPinger, GrpcPinger, GrpcStreamPinger, HlsPinger, HttpMethod, HttpPinger, MqttPinger,
+    MqttVersion, Pinger, RecordType, TcpPinger, UdpPinger, WebSocketPinger,
 };
 
 const DEFAULT_COUNT: u64 = 1;
@@ -144,6 +144,18 @@ struct GrpcPingArgs {
     /// Defaults to empty (overall server health).
     #[serde(default)]
     service: Option<String>,
+    #[serde(default)]
+    count: Option<u64>,
+    #[serde(default)]
+    timeout_ms: Option<u64>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct HlsPingArgs {
+    /// HLS playlist URL, e.g.
+    /// `https://example.com/stream/master.m3u8`. Master and media
+    /// playlists both work; the pinger follows variants automatically.
+    url: String,
     #[serde(default)]
     count: Option<u64>,
     #[serde(default)]
@@ -341,6 +353,36 @@ impl KnockknockServer {
         if let Some(service) = args.service {
             p = p.with_service(service);
         }
+        let report = run_pings(&p, count).await;
+        report_to_result(&report)
+    }
+
+    #[tool(
+        description = "gRPC server-streaming ping — opens grpc.health.v1.Health/Watch and times the first SERVING status message. Spec requires the server to send current status immediately, so this measures the open-stream-to-first-message RTT."
+    )]
+    async fn grpc_watch_ping(
+        &self,
+        Parameters(args): Parameters<GrpcPingArgs>,
+    ) -> Result<CallToolResult, McpError> {
+        let count = count_or_default(args.count);
+        let mut p =
+            GrpcStreamPinger::new(args.endpoint).with_timeout(timeout_or_default(args.timeout_ms));
+        if let Some(service) = args.service {
+            p = p.with_service(service);
+        }
+        let report = run_pings(&p, count).await;
+        report_to_result(&report)
+    }
+
+    #[tool(
+        description = "HLS ping — fetches the M3U8 playlist (following a variant if it's a master playlist) and times the first segment's first byte. Captures realistic player startup latency."
+    )]
+    async fn hls_ping(
+        &self,
+        Parameters(args): Parameters<HlsPingArgs>,
+    ) -> Result<CallToolResult, McpError> {
+        let count = count_or_default(args.count);
+        let p = HlsPinger::new(args.url).with_timeout(timeout_or_default(args.timeout_ms));
         let report = run_pings(&p, count).await;
         report_to_result(&report)
     }

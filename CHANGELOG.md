@@ -10,6 +10,28 @@ version of each published crate.
 ## [1.4.0] / zpinger 0.4.0 — 2026-04-29
 
 ### Added
+- **HLS pinger** (`zpinger::HlsPinger`). Captures realistic
+  player-visible startup latency: GET the M3U8 you point at, follow
+  the first `EXT-X-STREAM-INF` variant if it's a master playlist,
+  then GET the first segment with `Range: bytes=0-0` so the
+  time-to-first-byte metric isn't polluted by full segment download.
+  All steps fold into the single `time=` the trait reports.
+  `https://` reuses the existing rustls + webpki-roots layer;
+  `with_tls_config` overrides for self-signed test endpoints.
+- **gRPC streaming pinger** (`zpinger::GrpcStreamPinger`). Calls
+  `grpc.health.v1.Health/Watch` instead of `Health/Check` and times
+  the first `HealthCheckResponse` message (which the spec mandates
+  the server send immediately on subscribe). Exposed through
+  `knockknock grpc <endpoint> --watch` rather than its own
+  subcommand to keep the CLI shape compact.
+- **CLI gains `hls <url>` subcommand and a `--watch` flag on `grpc`.**
+- **MCP server gains `hls_ping` and `grpc_watch_ping` tools** so the
+  AI agent surface stays at parity with the CLI (now nine tools).
+- **testserver gains `start_hls_ok`** + `testserver --hls <port>`
+  (default 18007) — minimal HLS responder serving
+  `/playlist.m3u8`, `/master.m3u8`, and `/segment0.ts` (with proper
+  `Range: bytes=0-0` → 206 Partial Content support).
+
 - **`knockknock-mcp` binary** — Model Context Protocol server
   exposing every pinger as a typed tool over stdio, gated behind the
   new `mcp` feature so default installs stay slim. Built on

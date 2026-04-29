@@ -443,6 +443,87 @@ async fn grpcs_pinger_fails_without_trust_anchor() {
 }
 
 #[tokio::test]
+async fn grpc_stream_pinger_succeeds_against_test_server() {
+    let addr = testserver::start_grpc_ok("127.0.0.1:0").unwrap();
+    let p = zpinger::GrpcStreamPinger::new(format!("grpc://localhost:{}", addr.port()));
+    p.ping().await.unwrap();
+}
+
+#[tokio::test]
+async fn grpc_stream_pinger_via_timed_helper() {
+    let addr = testserver::start_grpc_ok("127.0.0.1:0").unwrap();
+    let p = zpinger::GrpcStreamPinger::new(format!("grpc://localhost:{}", addr.port()));
+    let elapsed = zpinger::timed(&p).await.unwrap();
+    assert!(elapsed > Duration::from_nanos(0));
+}
+
+#[tokio::test]
+async fn grpc_stream_pinger_fails_on_closed_port() {
+    let p = zpinger::GrpcStreamPinger::new(format!("grpc://{}", closed_tcp_addr()))
+        .with_timeout(Duration::from_millis(500));
+    assert!(p.ping().await.is_err());
+}
+
+#[tokio::test]
+async fn grpc_stream_pinger_usable_as_trait_object() {
+    let addr = testserver::start_grpc_ok("127.0.0.1:0").unwrap();
+    let p: Box<dyn Pinger> = Box::new(zpinger::GrpcStreamPinger::new(format!(
+        "grpc://localhost:{}",
+        addr.port()
+    )));
+    p.ping().await.unwrap();
+}
+
+#[tokio::test]
+async fn hls_pinger_succeeds_on_media_playlist() {
+    let addr = testserver::start_hls_ok("127.0.0.1:0").unwrap();
+    let url = format!("http://localhost:{}/playlist.m3u8", addr.port());
+    zpinger::HlsPinger::new(url).ping().await.unwrap();
+}
+
+#[tokio::test]
+async fn hls_pinger_succeeds_on_master_playlist() {
+    // Master playlist points at media playlist via STREAM-INF; the
+    // pinger should follow the variant before fetching the segment.
+    let addr = testserver::start_hls_ok("127.0.0.1:0").unwrap();
+    let url = format!("http://localhost:{}/master.m3u8", addr.port());
+    zpinger::HlsPinger::new(url).ping().await.unwrap();
+}
+
+#[tokio::test]
+async fn hls_pinger_via_timed_helper() {
+    let addr = testserver::start_hls_ok("127.0.0.1:0").unwrap();
+    let url = format!("http://localhost:{}/playlist.m3u8", addr.port());
+    let p = zpinger::HlsPinger::new(url);
+    let elapsed = zpinger::timed(&p).await.unwrap();
+    assert!(elapsed > Duration::from_nanos(0));
+}
+
+#[tokio::test]
+async fn hls_pinger_fails_on_non_m3u8_response() {
+    // /anything path returns 404 from start_hls_ok; ping should fail
+    // because the first GET doesn't yield a playlist.
+    let addr = testserver::start_hls_ok("127.0.0.1:0").unwrap();
+    let url = format!("http://localhost:{}/not-here.m3u8", addr.port());
+    assert!(zpinger::HlsPinger::new(url).ping().await.is_err());
+}
+
+#[tokio::test]
+async fn hls_pinger_fails_on_closed_port() {
+    let url = format!("http://{}/playlist.m3u8", closed_tcp_addr());
+    let p = zpinger::HlsPinger::new(url).with_timeout(Duration::from_millis(500));
+    assert!(p.ping().await.is_err());
+}
+
+#[tokio::test]
+async fn hls_pinger_usable_as_trait_object() {
+    let addr = testserver::start_hls_ok("127.0.0.1:0").unwrap();
+    let url = format!("http://localhost:{}/playlist.m3u8", addr.port());
+    let p: Box<dyn Pinger> = Box::new(zpinger::HlsPinger::new(url));
+    p.ping().await.unwrap();
+}
+
+#[tokio::test]
 async fn dns_pinger_rejects_response_with_tampered_question() {
     // Hand-rolled tiny UDP server: receive the query, set QR=1 +
     // RCODE=0 like the real testserver, but corrupt one byte inside

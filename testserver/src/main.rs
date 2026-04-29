@@ -37,6 +37,11 @@ struct Args {
     #[arg(long, default_value_t = 18006)]
     grpc: u16,
 
+    /// HLS (HTTP/1.1) port serving `/playlist.m3u8` + `/segment0.ts`
+    /// (use 0 for ephemeral)
+    #[arg(long, default_value_t = 18007)]
+    hls: u16,
+
     /// Bind address (default 0.0.0.0; use 127.0.0.1 for loopback only)
     #[arg(long, default_value = "0.0.0.0")]
     bind: String,
@@ -80,6 +85,9 @@ fn main() {
     let grpc = start_or_die("grpc", args.grpc, || {
         testserver::start_grpc_ok(format!("{bind}:{}", args.grpc))
     });
+    let hls = start_or_die("hls", args.hls, || {
+        testserver::start_hls_ok(format!("{bind}:{}", args.hls))
+    });
 
     println!("[tcp]  listening on {tcp}");
     println!("[udp]  listening on {udp}");
@@ -88,6 +96,7 @@ fn main() {
     println!("[dns]  listening on {dns}");
     println!("[mqtt] listening on {mqtt}");
     println!("[grpc] listening on {grpc}");
+    println!("[hls]  listening on {hls}");
     println!();
     println!("Try in another terminal:");
     println!("  knockknock tcp localhost:{}", tcp.port());
@@ -97,6 +106,11 @@ fn main() {
     println!("  knockknock dns 127.0.0.1:{} -q example.com", dns.port());
     println!("  knockknock mqtt mqtt://localhost:{}", mqtt.port());
     println!("  knockknock grpc grpc://localhost:{}", grpc.port());
+    println!(
+        "  knockknock hls http://localhost:{}/playlist.m3u8",
+        hls.port()
+    );
+    println!("  knockknock grpc grpc://localhost:{} --watch", grpc.port());
     println!();
     println!("Press Ctrl+C to stop.");
 

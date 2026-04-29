@@ -19,6 +19,8 @@ use tonic_health::pb::health_check_response::ServingStatus;
 use tonic_health::pb::health_client::HealthClient;
 use tonic_health::pb::HealthCheckRequest;
 
+use futures_util::StreamExt;
+
 use crate::pinger::Pinger;
 use crate::uri::get_uri;
 
@@ -109,6 +111,104 @@ impl Pinger for GrpcPinger {
             return Err(io::Error::other(format!(
                 "gRPC server returned status {} (expected SERVING=1)",
                 resp.status
+            )));
+        }
+        Ok(())
+    }
+}
+
+/// gRPC server-streaming pinger — calls the standard
+/// `grpc.health.v1.Health/Watch` RPC and waits for the broker's first
+/// `HealthCheckResponse`. Per the spec, the server **must** send the
+/// current status immediately on subscribe, so this measures the
+/// real "open server stream → first message" RTT, not just connection
+/// setup.
+///
+/// Same builder shape as `GrpcPinger` (endpoint / service / timeout /
+/// CA cert override). Use this for endpoints that expose Watch in
+/// addition to (or instead of) Check.
+pub struct GrpcStreamPinger {
+    pub endpoint: String,
+    pub service: String,
+    pub timeout: Duration,
+    ca_cert_pem: Option<Vec<u8>>,
+}
+
+impl GrpcStreamPinger {
+    pub fn new(endpoint: impl Into<String>) -> Self {
+        Self {
+            endpoint: endpoint.into(),
+            service: String::new(),
+            timeout: DEFAULT_TIMEOUT,
+            ca_cert_pem: None,
+        }
+    }
+
+    pub fn with_service(mut self, service: impl Into<String>) -> Self {
+        self.service = service.into();
+        self
+    }
+
+    pub fn with_timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = timeout;
+        self
+    }
+
+    pub fn with_ca_cert(mut self, pem: impl Into<Vec<u8>>) -> Self {
+        self.ca_cert_pem = Some(pem.into());
+        self
+    }
+}
+
+#[async_trait]
+impl Pinger for GrpcStreamPinger {
+    async fn ping(&self) -> Result<()> {
+        let url = normalize_endpoint(&self.endpoint)?;
+        let uri = get_uri(&self.endpoint);
+        let domain = uri.domain.clone();
+
+        let mut endpoint = Endpoint::from_shared(url)
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e.to_string()))?
+            .timeout(self.timeout)
+            .connect_timeout(self.timeout);
+
+        let scheme = uri.scheme.to_ascii_lowercase();
+        let is_tls = scheme == "grpcs" || scheme == "https";
+        if is_tls {
+            let mut tls = ClientTlsConfig::new().with_webpki_roots();
+            if let Some(pem) = &self.ca_cert_pem {
+                tls = ClientTlsConfig::new().ca_certificate(Certificate::from_pem(pem.clone()));
+            }
+            if !domain.is_empty() {
+                tls = tls.domain_name(domain);
+            }
+            endpoint = endpoint
+                .tls_config(tls)
+                .map_err(|e| io::Error::other(format!("tonic tls_config: {e}")))?;
+        }
+
+        let channel = endpoint
+            .connect()
+            .await
+            .map_err(|e| io::Error::other(format!("connect: {e}")))?;
+        let mut client = HealthClient::new(channel);
+        let req = HealthCheckRequest {
+            service: self.service.clone(),
+        };
+        let response = client
+            .watch(req)
+            .await
+            .map_err(|status| io::Error::other(format!("Health/Watch: {status}")))?;
+        let mut stream = response.into_inner();
+        let first = stream
+            .next()
+            .await
+            .ok_or_else(|| io::Error::other("Watch stream closed before first message"))?
+            .map_err(|status| io::Error::other(format!("Watch stream error: {status}")))?;
+        if first.status != ServingStatus::Serving as i32 {
+            return Err(io::Error::other(format!(
+                "first watched status was {} (expected SERVING=1)",
+                first.status
             )));
         }
         Ok(())

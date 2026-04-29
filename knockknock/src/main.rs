@@ -3,8 +3,8 @@ use colored::*;
 use std::io::Result;
 use std::time::Duration;
 use zpinger::{
-    DnsPinger, GrpcPinger, HttpPinger, MqttPinger, MqttVersion, Pinger, TcpPinger, UdpPinger,
-    WebSocketPinger,
+    DnsPinger, GrpcPinger, GrpcStreamPinger, HlsPinger, HttpPinger, MqttPinger, MqttVersion,
+    Pinger, TcpPinger, UdpPinger, WebSocketPinger,
 };
 
 #[derive(Parser)]
@@ -48,7 +48,8 @@ enum Command {
     /// gRPC ping — calls the standard
     /// `grpc.health.v1.Health/Check` unary RPC. Accepts `grpc://` /
     /// `http://` for plaintext H2C and `grpcs://` / `https://` for
-    /// TLS.
+    /// TLS. Pass `--watch` to call `Health/Watch` server-streaming
+    /// instead and measure time-to-first-status-message.
     Grpc {
         /// gRPC endpoint, e.g. `grpc://localhost:50051` or
         /// `https://api.example.com:443`.
@@ -57,6 +58,18 @@ enum Command {
         /// Empty (default) asks for the server's overall health.
         #[arg(long, default_value = "")]
         service: String,
+        /// Use server-streaming Health/Watch instead of the unary
+        /// Health/Check.
+        #[arg(long)]
+        watch: bool,
+    },
+    /// HLS ping — fetches a master / media `.m3u8`, follows a variant
+    /// if needed, and times the first segment fetch (Range:
+    /// bytes=0-0). Captures realistic player startup latency.
+    Hls {
+        /// HLS playlist URL, e.g.
+        /// `https://example.com/stream/master.m3u8`.
+        url: String,
     },
     /// MQTT 3.1.1 ping (mqtt:// or mqtts://). Runs the
     /// CONNECT/CONNACK handshake plus a PINGREQ/PINGRESP control
@@ -162,6 +175,7 @@ fn target_of(command: &Command) -> &str {
         Command::Dns { server, .. } => server,
         Command::Mqtt { broker, .. } => broker,
         Command::Grpc { endpoint, .. } => endpoint,
+        Command::Hls { url } => url,
         Command::Http { method } => match method {
             HttpMethod::Connect { target }
             | HttpMethod::Get { target }
@@ -185,9 +199,18 @@ fn build_pinger(command: &Command) -> Box<dyn Pinger> {
         } => Box::new(
             DnsPinger::new(server.clone(), query.clone()).with_record_type((*record_type).into()),
         ),
-        Command::Grpc { endpoint, service } => {
-            Box::new(GrpcPinger::new(endpoint.clone()).with_service(service.clone()))
+        Command::Grpc {
+            endpoint,
+            service,
+            watch,
+        } => {
+            if *watch {
+                Box::new(GrpcStreamPinger::new(endpoint.clone()).with_service(service.clone()))
+            } else {
+                Box::new(GrpcPinger::new(endpoint.clone()).with_service(service.clone()))
+            }
         }
+        Command::Hls { url } => Box::new(HlsPinger::new(url.clone())),
         Command::Mqtt {
             broker,
             client_id,
@@ -408,6 +431,8 @@ mod tests {
                 "--service",
                 "my.svc",
             ],
+            &["knockknock", "grpc", "grpc://localhost:50051", "--watch"],
+            &["knockknock", "hls", "http://localhost:18007/playlist.m3u8"],
         ];
         for args in cases {
             let cli = parse(args);
@@ -531,7 +556,9 @@ mod tests {
     fn parses_grpc_subcommand_default_service() {
         let cli = parse(&["knockknock", "grpc", "grpc://localhost:50051"]);
         match &cli.command {
-            Command::Grpc { endpoint, service } => {
+            Command::Grpc {
+                endpoint, service, ..
+            } => {
                 assert_eq!(endpoint, "grpc://localhost:50051");
                 assert!(service.is_empty());
             }
@@ -549,7 +576,9 @@ mod tests {
             "my.Svc",
         ]);
         match &cli.command {
-            Command::Grpc { endpoint, service } => {
+            Command::Grpc {
+                endpoint, service, ..
+            } => {
                 assert_eq!(endpoint, "grpcs://broker.example.com:443");
                 assert_eq!(service, "my.Svc");
             }
@@ -560,6 +589,30 @@ mod tests {
     #[test]
     fn grpc_subcommand_requires_endpoint() {
         let result = Cli::try_parse_from(["knockknock", "grpc"]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parses_grpc_subcommand_with_watch_flag() {
+        let cli = parse(&["knockknock", "grpc", "grpc://localhost:50051", "--watch"]);
+        match &cli.command {
+            Command::Grpc { watch, .. } => assert!(watch),
+            other => panic!("expected Grpc, got {:?}", std::mem::discriminant(other)),
+        }
+    }
+
+    #[test]
+    fn parses_hls_subcommand() {
+        let cli = parse(&["knockknock", "hls", "http://example.com/master.m3u8"]);
+        match &cli.command {
+            Command::Hls { url } => assert_eq!(url, "http://example.com/master.m3u8"),
+            other => panic!("expected Hls, got {:?}", std::mem::discriminant(other)),
+        }
+    }
+
+    #[test]
+    fn hls_subcommand_requires_url() {
+        let result = Cli::try_parse_from(["knockknock", "hls"]);
         assert!(result.is_err());
     }
 }

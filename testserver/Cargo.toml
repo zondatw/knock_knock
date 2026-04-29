@@ -21,4 +21,8 @@ clap = { version = "4", features = ["derive"] }
 rcgen = "0.13"
 rustls = { version = "0.23", default-features = false, features = ["std", "ring", "tls12"] }
 rustls-pki-types = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "net", "macros"] }
+tokio-stream = { version = "0.1", default-features = false, features = ["net"] }
+tonic = { version = "0.12", default-features = false, features = ["server", "tls"] }
+tonic-health = { version = "0.12", default-features = false }
 tungstenite = { version = "0.24", default-features = false, features = ["handshake"] }

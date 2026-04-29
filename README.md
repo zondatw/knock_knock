@@ -89,6 +89,7 @@ $ cargo run -p testserver
 [ws]   listening on 0.0.0.0:18003
 [dns]  listening on 0.0.0.0:18004
 [mqtt] listening on 0.0.0.0:18005
+[grpc] listening on 0.0.0.0:18006
 
 Try in another terminal:
   knockknock tcp localhost:18000
@@ -97,13 +98,14 @@ Try in another terminal:
   knockknock ws ws://localhost:18003/
   knockknock dns 127.0.0.1:18004 -q example.com
   knockknock mqtt mqtt://localhost:18005
+  knockknock grpc grpc://localhost:18006
 ```
 
 If the default ports are taken, override them (use `0` for an OS-picked
 ephemeral port, or pass any specific number):
 
 ```shell
-$ cargo run -p testserver -- --tcp 0 --udp 0 --http 0 --ws 0 --dns 0 --mqtt 0 --bind 127.0.0.1
+$ cargo run -p testserver -- --tcp 0 --udp 0 --http 0 --ws 0 --dns 0 --mqtt 0 --grpc 0 --bind 127.0.0.1
 ```
 
 The same servers are used by `zpinger`'s integration tests, so
@@ -127,6 +129,9 @@ Commands:
         runs CONNECT/CONNACK plus a PINGREQ/PINGRESP control round
         trip, then DISCONNECT. Pass --v5 for MQTT 5. Default port
         1883 plain, 8883 TLS.
+  grpc  gRPC ping — calls the standard
+        grpc.health.v1.Health/Check unary RPC. Accepts grpc:// /
+        http:// (plaintext H2C) or grpcs:// / https:// (TLS).
 
 Options:
   -c, --count <COUNT>  ping times [default: 3]
@@ -146,6 +151,8 @@ $ knockknock dns 1.1.1.1 -q example.com -t aaaa
 $ knockknock mqtt mqtt://broker.hivemq.com
 $ knockknock mqtt mqtt://broker.hivemq.com --v5
 $ knockknock mqtt mqtts://broker.example.com:8883 --client-id custom
+$ knockknock grpc grpc://localhost:50051
+$ knockknock grpc grpcs://api.example.com:443 --service my.Svc
 ```
 
 ### Ping TCP path

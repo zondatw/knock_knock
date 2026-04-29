@@ -3,7 +3,8 @@ use colored::*;
 use std::io::Result;
 use std::time::Duration;
 use zpinger::{
-    DnsPinger, HttpPinger, MqttPinger, MqttVersion, Pinger, TcpPinger, UdpPinger, WebSocketPinger,
+    DnsPinger, GrpcPinger, HttpPinger, MqttPinger, MqttVersion, Pinger, TcpPinger, UdpPinger,
+    WebSocketPinger,
 };
 
 #[derive(Parser)]
@@ -43,6 +44,19 @@ enum Command {
         /// DNS record type.
         #[arg(short = 't', long, value_enum, default_value_t = DnsType::A)]
         record_type: DnsType,
+    },
+    /// gRPC ping — calls the standard
+    /// `grpc.health.v1.Health/Check` unary RPC. Accepts `grpc://` /
+    /// `http://` for plaintext H2C and `grpcs://` / `https://` for
+    /// TLS.
+    Grpc {
+        /// gRPC endpoint, e.g. `grpc://localhost:50051` or
+        /// `https://api.example.com:443`.
+        endpoint: String,
+        /// Service name passed in `HealthCheckRequest.service`.
+        /// Empty (default) asks for the server's overall health.
+        #[arg(long, default_value = "")]
+        service: String,
     },
     /// MQTT 3.1.1 ping (mqtt:// or mqtts://). Runs the
     /// CONNECT/CONNACK handshake plus a PINGREQ/PINGRESP control
@@ -147,6 +161,7 @@ fn target_of(command: &Command) -> &str {
         Command::Ws { target } => target,
         Command::Dns { server, .. } => server,
         Command::Mqtt { broker, .. } => broker,
+        Command::Grpc { endpoint, .. } => endpoint,
         Command::Http { method } => match method {
             HttpMethod::Connect { target }
             | HttpMethod::Get { target }
@@ -170,6 +185,9 @@ fn build_pinger(command: &Command) -> Box<dyn Pinger> {
         } => Box::new(
             DnsPinger::new(server.clone(), query.clone()).with_record_type((*record_type).into()),
         ),
+        Command::Grpc { endpoint, service } => {
+            Box::new(GrpcPinger::new(endpoint.clone()).with_service(service.clone()))
+        }
         Command::Mqtt {
             broker,
             client_id,
@@ -206,8 +224,8 @@ async fn main() -> Result<()> {
     let pinger = build_pinger(&cli.command);
 
     let resolve_target = match &cli.command {
-        // DNS / MQTT subcommands: zpinger::resolve defaults to port
-        // 80 for schemeless inputs, which is wrong for these
+        // DNS / MQTT / gRPC subcommands: zpinger::resolve defaults
+        // to port 80 for schemeless inputs, which is wrong for these
         // protocols. Patch the target so the "DNS lookup:" display
         // shows the address the pinger will actually talk to.
         Command::Dns { server, .. } => default_port_target(server, 53),
@@ -219,6 +237,18 @@ async fn main() -> Result<()> {
                 1883
             };
             default_port_target(broker, scheme_default)
+        }
+        Command::Grpc { endpoint, .. } => {
+            // Translate grpc:// → http:// and grpcs:// → https:// so
+            // resolve() applies the right port default (80 / 443),
+            // matching what tonic does at runtime.
+            if let Some(rest) = endpoint.strip_prefix("grpcs://") {
+                format!("https://{rest}")
+            } else if let Some(rest) = endpoint.strip_prefix("grpc://") {
+                format!("http://{rest}")
+            } else {
+                endpoint.clone()
+            }
         }
         _ => target.clone(),
     };
@@ -369,6 +399,15 @@ mod tests {
                 "custom",
             ],
             &["knockknock", "mqtt", "mqtt://localhost:1883", "--v5"],
+            &["knockknock", "grpc", "grpc://localhost:50051"],
+            &["knockknock", "grpc", "grpcs://broker.example.com:443"],
+            &[
+                "knockknock",
+                "grpc",
+                "grpc://localhost:50051",
+                "--service",
+                "my.svc",
+            ],
         ];
         for args in cases {
             let cli = parse(args);
@@ -485,6 +524,42 @@ mod tests {
     #[test]
     fn mqtt_subcommand_requires_broker() {
         let result = Cli::try_parse_from(["knockknock", "mqtt"]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parses_grpc_subcommand_default_service() {
+        let cli = parse(&["knockknock", "grpc", "grpc://localhost:50051"]);
+        match &cli.command {
+            Command::Grpc { endpoint, service } => {
+                assert_eq!(endpoint, "grpc://localhost:50051");
+                assert!(service.is_empty());
+            }
+            other => panic!("expected Grpc, got {:?}", std::mem::discriminant(other)),
+        }
+    }
+
+    #[test]
+    fn parses_grpc_subcommand_with_service() {
+        let cli = parse(&[
+            "knockknock",
+            "grpc",
+            "grpcs://broker.example.com:443",
+            "--service",
+            "my.Svc",
+        ]);
+        match &cli.command {
+            Command::Grpc { endpoint, service } => {
+                assert_eq!(endpoint, "grpcs://broker.example.com:443");
+                assert_eq!(service, "my.Svc");
+            }
+            other => panic!("expected Grpc, got {:?}", std::mem::discriminant(other)),
+        }
+    }
+
+    #[test]
+    fn grpc_subcommand_requires_endpoint() {
+        let result = Cli::try_parse_from(["knockknock", "grpc"]);
         assert!(result.is_err());
     }
 }

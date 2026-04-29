@@ -5,6 +5,7 @@ use std::net::SocketAddr;
 mod test_pinger;
 
 mod dns;
+mod grpc;
 mod http;
 mod level4;
 mod mqtt;
@@ -14,6 +15,7 @@ pub mod uri;
 mod websocket;
 
 pub use crate::dns::{DnsPinger, RecordType};
+pub use crate::grpc::GrpcPinger;
 pub use crate::http::{HttpMethod, HttpPinger};
 pub use crate::level4::{TcpPinger, UdpPinger};
 pub use crate::mqtt::{MqttPinger, MqttVersion};

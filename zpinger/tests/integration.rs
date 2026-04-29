@@ -383,6 +383,66 @@ async fn mqtts_pinger_fails_without_trust_anchor() {
 }
 
 #[tokio::test]
+async fn grpc_pinger_succeeds_against_test_server() {
+    let addr = testserver::start_grpc_ok("127.0.0.1:0").unwrap();
+    let p = zpinger::GrpcPinger::new(format!("grpc://localhost:{}", addr.port()));
+    p.ping().await.unwrap();
+}
+
+#[tokio::test]
+async fn grpc_pinger_via_timed_helper() {
+    let addr = testserver::start_grpc_ok("127.0.0.1:0").unwrap();
+    let p = zpinger::GrpcPinger::new(format!("grpc://localhost:{}", addr.port()));
+    let elapsed = zpinger::timed(&p).await.unwrap();
+    assert!(elapsed > Duration::from_nanos(0));
+}
+
+#[tokio::test]
+async fn grpc_pinger_with_service_name() {
+    let addr = testserver::start_grpc_ok("127.0.0.1:0").unwrap();
+    // testserver only marks the overall ("") service as SERVING. A
+    // specific service name should come back NOT_SERVING (or
+    // unknown), so the ping should fail — proving with_service
+    // actually reaches the wire.
+    let p = zpinger::GrpcPinger::new(format!("grpc://localhost:{}", addr.port()))
+        .with_service("nonexistent.Service");
+    assert!(p.ping().await.is_err());
+}
+
+#[tokio::test]
+async fn grpc_pinger_fails_on_closed_port() {
+    let p = zpinger::GrpcPinger::new(format!("grpc://{}", closed_tcp_addr()))
+        .with_timeout(Duration::from_millis(500));
+    assert!(p.ping().await.is_err());
+}
+
+#[tokio::test]
+async fn grpc_pinger_usable_as_trait_object() {
+    let addr = testserver::start_grpc_ok("127.0.0.1:0").unwrap();
+    let p: Box<dyn Pinger> = Box::new(zpinger::GrpcPinger::new(format!(
+        "grpc://localhost:{}",
+        addr.port()
+    )));
+    p.ping().await.unwrap();
+}
+
+#[tokio::test]
+async fn grpcs_pinger_succeeds_with_trusted_cert() {
+    let server = testserver::start_grpcs_ok("127.0.0.1:0").unwrap();
+    let p = zpinger::GrpcPinger::new(format!("grpcs://localhost:{}", server.addr.port()))
+        .with_ca_cert(server.ca_pem);
+    p.ping().await.unwrap();
+}
+
+#[tokio::test]
+async fn grpcs_pinger_fails_without_trust_anchor() {
+    let server = testserver::start_grpcs_ok("127.0.0.1:0").unwrap();
+    let p = zpinger::GrpcPinger::new(format!("grpcs://localhost:{}", server.addr.port()))
+        .with_timeout(Duration::from_millis(500));
+    assert!(p.ping().await.is_err());
+}
+
+#[tokio::test]
 async fn dns_pinger_rejects_response_with_tampered_question() {
     // Hand-rolled tiny UDP server: receive the query, set QR=1 +
     // RCODE=0 like the real testserver, but corrupt one byte inside

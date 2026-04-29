@@ -5,6 +5,8 @@ use std::thread;
 
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use rustls::{ClientConfig, RootCertStore, ServerConfig, ServerConnection, StreamOwned};
+use tokio_stream::wrappers::TcpListenerStream;
+use tonic::transport::ServerTlsConfig;
 use tungstenite::accept;
 use tungstenite::protocol::Message;
 
@@ -303,6 +305,90 @@ fn handle_mqtt_session<S: Read + Write>(mut stream: S) {
             }
         }
     }
+}
+
+/// Handle returned by `start_grpcs_ok` — the address the broker is
+/// bound to plus the PEM-encoded CA certificate clients need to
+/// trust to talk to it.
+pub struct GrpcsServer {
+    pub addr: SocketAddr,
+    pub ca_pem: Vec<u8>,
+}
+
+/// Spin up a plaintext gRPC server on `addr` that implements the
+/// standard `grpc.health.v1.Health` service via `tonic-health`. The
+/// overall ("" service) status is set to `SERVING` so a vanilla
+/// `Health/Check` from `GrpcPinger` succeeds.
+pub fn start_grpc_ok<A: ToSocketAddrs>(addr: A) -> Result<SocketAddr> {
+    let std_listener = TcpListener::bind(addr)?;
+    std_listener.set_nonblocking(true)?;
+    let bound = std_listener.local_addr()?;
+
+    thread::spawn(move || {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("tokio runtime");
+        rt.block_on(async move {
+            let listener =
+                tokio::net::TcpListener::from_std(std_listener).expect("from_std listener");
+            let (mut reporter, service) = tonic_health::server::health_reporter();
+            reporter
+                .set_service_status("", tonic_health::ServingStatus::Serving)
+                .await;
+            let _ = tonic::transport::Server::builder()
+                .add_service(service)
+                .serve_with_incoming(TcpListenerStream::new(listener))
+                .await;
+        });
+    });
+
+    Ok(bound)
+}
+
+/// TLS-wrapped variant of `start_grpc_ok` for `grpcs://` clients.
+/// Returns the bound address plus the PEM bytes of the freshly
+/// generated self-signed certificate, so test code can pass them to
+/// `GrpcPinger::with_ca_cert(...)`.
+pub fn start_grpcs_ok<A: ToSocketAddrs>(addr: A) -> Result<GrpcsServer> {
+    let issued = rcgen::generate_simple_self_signed(vec!["localhost".to_string()])
+        .map_err(|e| std::io::Error::other(format!("rcgen: {e}")))?;
+    let cert_pem = issued.cert.pem().into_bytes();
+    let key_pem = issued.key_pair.serialize_pem().into_bytes();
+
+    let std_listener = TcpListener::bind(addr)?;
+    std_listener.set_nonblocking(true)?;
+    let bound = std_listener.local_addr()?;
+
+    let identity = tonic::transport::Identity::from_pem(&cert_pem, &key_pem);
+    let ca_pem = cert_pem.clone();
+
+    thread::spawn(move || {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("tokio runtime");
+        rt.block_on(async move {
+            let listener =
+                tokio::net::TcpListener::from_std(std_listener).expect("from_std listener");
+            let (mut reporter, service) = tonic_health::server::health_reporter();
+            reporter
+                .set_service_status("", tonic_health::ServingStatus::Serving)
+                .await;
+            let tls = ServerTlsConfig::new().identity(identity);
+            let _ = tonic::transport::Server::builder()
+                .tls_config(tls)
+                .expect("server tls_config")
+                .add_service(service)
+                .serve_with_incoming(TcpListenerStream::new(listener))
+                .await;
+        });
+    });
+
+    Ok(GrpcsServer {
+        addr: bound,
+        ca_pem,
+    })
 }
 
 /// Spin up a minimal MQTT 3.1.1 broker on `addr`. Accepts the

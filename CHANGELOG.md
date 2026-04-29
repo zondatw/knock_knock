@@ -7,6 +7,21 @@ version of each published crate.
 
 ## [Unreleased]
 
+### Added
+- **`knockknock-mcp` binary** — Model Context Protocol server
+  exposing every pinger as a typed tool over stdio, gated behind the
+  new `mcp` feature so default installs stay slim. Built on
+  [`rmcp`](https://crates.io/crates/rmcp) 0.6 with `serde` /
+  `serde_json` / `schemars` for tool argument schemas. Seven tools:
+  `tcp_ping`, `udp_ping`, `http_ping`, `ws_ping`, `dns_ping`,
+  `mqtt_ping`, `grpc_ping`. Each returns a JSON `PingReport` with
+  per-iteration `elapsed_ms` / `success` / `error` plus a
+  `summary` block. Default `count` is 1 (single reachability probe);
+  AI agents that want statistical RTT pass an explicit count. Default
+  `timeout_ms` is 5000.
+- README gains an "MCP server" section with the tool table, return
+  shape, and a Claude Desktop wiring snippet.
+
 ## [1.3.0] / zpinger 0.4.0 — 2026-04-29
 
 ### Added

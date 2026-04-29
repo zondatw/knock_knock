@@ -404,6 +404,77 @@ $ knockknock grpc grpcs://api.example.com:443 -c 3
 $ knockknock grpc grpc://localhost:18006 --service my.package.Service
 ```
 
+## MCP server (`knockknock-mcp`)
+
+A second binary, `knockknock-mcp`, exposes every protocol as a typed
+[Model Context Protocol](https://modelcontextprotocol.io) tool over
+stdio. AI agents (Claude Desktop, MCP-aware editors / IDEs) can call
+the same pings the CLI does, with structured JSON results that
+include per-iteration timings plus a summary.
+
+The binary is gated behind the `mcp` feature so the default
+`knockknock` install stays minimal.
+
+```shell
+$ cargo install knockknock --features mcp
+# or, from a checkout:
+$ cargo build -p knockknock --features mcp --release
+$ ./target/release/knockknock-mcp     # speaks MCP JSON-RPC on stdin/stdout
+```
+
+Tools exposed (one per protocol; `count` defaults to **1**, not 3
+like the CLI — agents usually want a single reachability probe rather
+than statistical RTT):
+
+| Tool        | Required args        | Optional args                                               |
+| ----------- | -------------------- | ----------------------------------------------------------- |
+| `tcp_ping`  | `target`             | `count`, `timeout_ms`                                       |
+| `udp_ping`  | `target`             | `count`, `timeout_ms`                                       |
+| `http_ping` | `target`             | `method` (get/post/...), `count`, `timeout_ms`              |
+| `ws_ping`   | `target`             | `count`, `timeout_ms`                                       |
+| `dns_ping`  | `server`, `query`    | `record_type` (a/aaaa/cname/mx/ns/txt), `count`, `timeout_ms` |
+| `mqtt_ping` | `broker`             | `client_id`, `v5` (bool), `count`, `timeout_ms`             |
+| `grpc_ping` | `endpoint`           | `service`, `count`, `timeout_ms`                            |
+
+Every tool returns the same shape:
+
+```json
+{
+  "iterations": [
+    {"elapsed_ms": 5.234, "success": true},
+    {"elapsed_ms": 4.891, "success": true}
+  ],
+  "summary": {
+    "count": 2,
+    "recv": 2,
+    "lose": 0,
+    "lose_pct": 0,
+    "total_ms": 10.125
+  }
+}
+```
+
+Failed iterations include an `error` field with the underlying error
+message (`{"elapsed_ms": 0.0, "success": false, "error": "..."}`).
+
+### Wiring into Claude Desktop
+
+Add to `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "knockknock": {
+      "command": "/absolute/path/to/knockknock-mcp"
+    }
+  }
+}
+```
+
+Then ask the agent things like "Is `https://api.example.com/health`
+reachable?" or "What's the gRPC RTT to my staging service?" and it
+will call the right tool.
+
 ## Library usage (`zpinger`)
 
 `zpinger` is published on crates.io and exposes the same protocols as a

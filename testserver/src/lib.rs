@@ -139,6 +139,95 @@ pub fn start_https_ok<A: ToSocketAddrs>(addr: A) -> Result<HttpsServer> {
     })
 }
 
+/// Spin up a minimal HLS server. Serves:
+///   - `/playlist.m3u8` — a one-segment media playlist
+///   - `/segment0.ts` — a tiny "fake TS" body (any bytes; HlsPinger
+///     only checks the response is HTTP/200 with non-empty body)
+///
+/// Any other path returns 404. Range requests are honored on
+/// `/segment0.ts` so `HlsPinger`'s `Range: bytes=0-0` probe gets a
+/// proper 206 Partial Content response.
+pub fn start_hls_ok<A: ToSocketAddrs>(addr: A) -> Result<SocketAddr> {
+    let listener = TcpListener::bind(addr)?;
+    let bound = listener.local_addr()?;
+    thread::spawn(move || {
+        for stream in listener.incoming().flatten() {
+            thread::spawn(move || handle_hls(stream));
+        }
+    });
+    Ok(bound)
+}
+
+fn handle_hls(mut stream: std::net::TcpStream) {
+    let mut buf = [0u8; BUF_SIZE];
+    let n = match stream.read(&mut buf) {
+        Ok(n) => n,
+        Err(_) => return,
+    };
+    let req = String::from_utf8_lossy(&buf[..n]).to_string();
+    let request_line = req.lines().next().unwrap_or("");
+    let path = request_line.split_whitespace().nth(1).unwrap_or("");
+    let range_hdr = req
+        .lines()
+        .find(|l| l.to_ascii_lowercase().starts_with("range:"))
+        .map(|l| l.to_string());
+
+    let body: &[u8] = match path {
+        p if p.starts_with("/playlist.m3u8") => {
+            b"#EXTM3U\n\
+                  #EXT-X-VERSION:3\n\
+                  #EXT-X-TARGETDURATION:10\n\
+                  #EXT-X-MEDIA-SEQUENCE:0\n\
+                  #EXTINF:10.0,\n\
+                  segment0.ts\n\
+                  #EXT-X-ENDLIST\n"
+        }
+        p if p.starts_with("/master.m3u8") => {
+            b"#EXTM3U\n\
+                  #EXT-X-VERSION:3\n\
+                  #EXT-X-STREAM-INF:BANDWIDTH=800000,RESOLUTION=640x360\n\
+                  playlist.m3u8\n"
+        }
+        p if p.starts_with("/segment0.ts") => b"FAKE_TS_SEGMENT_PAYLOAD",
+        _ => {
+            let _ = stream.write_all(
+                b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            );
+            return;
+        }
+    };
+
+    let content_type = match path {
+        p if p.contains(".m3u8") => "application/vnd.apple.mpegurl",
+        _ => "video/mp2t",
+    };
+
+    if let Some(_range) = range_hdr {
+        // Serve byte 0 as a 206 Partial Content. Honor only the
+        // simplest "bytes=0-0" form — that's what HlsPinger sends.
+        let total = body.len();
+        let response = format!(
+            "HTTP/1.1 206 Partial Content\r\n\
+             Content-Type: {content_type}\r\n\
+             Content-Range: bytes 0-0/{total}\r\n\
+             Content-Length: 1\r\n\
+             Connection: close\r\n\r\n"
+        );
+        let _ = stream.write_all(response.as_bytes());
+        let _ = stream.write_all(&body[..1]);
+    } else {
+        let response = format!(
+            "HTTP/1.1 200 OK\r\n\
+             Content-Type: {content_type}\r\n\
+             Content-Length: {}\r\n\
+             Connection: close\r\n\r\n",
+            body.len()
+        );
+        let _ = stream.write_all(response.as_bytes());
+        let _ = stream.write_all(body);
+    }
+}
+
 /// Spin up a minimal UDP DNS responder. Each inbound packet that
 /// looks like a DNS query (≥ 12 bytes) is echoed back with the QR
 /// bit flipped on, RCODE forced to 0, and the question section left

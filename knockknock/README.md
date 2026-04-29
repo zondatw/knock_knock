@@ -12,7 +12,8 @@ a TCP socket opens, but whether the actual handshake / RPC completes.
 | `ws`       | `ws://`, `wss://`                                   | RFC 6455 upgrade + control PING/PONG round trip                |
 | `dns`      | host or host:port (default port 53)                 | UDP query + response validation (ID, QR, RCODE, question echo) |
 | `mqtt`     | `mqtt://`, `mqtts://` (`--v5` for MQTT 5)           | CONNECT/CONNACK + PINGREQ/PINGRESP + DISCONNECT                |
-| `grpc`     | `grpc://` / `http://` plaintext, `grpcs://` / `https://` TLS | `grpc.health.v1.Health/Check` unary RPC                |
+| `grpc`     | `grpc://` / `http://` plaintext, `grpcs://` / `https://` TLS | `grpc.health.v1.Health/Check` unary RPC (or `Health/Watch` server-stream with `--watch`) |
+| `hls`      | `http://` / `https://` URL of an `.m3u8` playlist   | M3U8 fetch (master → variant if needed) + first segment's first byte (Range request) |
 
 TLS for `https` / `wss` / `mqtts` / `grpcs` is handled by
 [`rustls`](https://github.com/rustls/rustls) with the Mozilla root CA
@@ -112,6 +113,7 @@ $ cargo run -p testserver
 [dns]  listening on 0.0.0.0:18004
 [mqtt] listening on 0.0.0.0:18005
 [grpc] listening on 0.0.0.0:18006
+[hls]  listening on 0.0.0.0:18007
 
 Try in another terminal:
   knockknock tcp localhost:18000
@@ -121,13 +123,15 @@ Try in another terminal:
   knockknock dns 127.0.0.1:18004 -q example.com
   knockknock mqtt mqtt://localhost:18005
   knockknock grpc grpc://localhost:18006
+  knockknock grpc grpc://localhost:18006 --watch
+  knockknock hls http://localhost:18007/playlist.m3u8
 ```
 
 If the default ports are taken, override them (use `0` for an OS-picked
 ephemeral port, or pass any specific number):
 
 ```shell
-$ cargo run -p testserver -- --tcp 0 --udp 0 --http 0 --ws 0 --dns 0 --mqtt 0 --grpc 0 --bind 127.0.0.1
+$ cargo run -p testserver -- --tcp 0 --udp 0 --http 0 --ws 0 --dns 0 --mqtt 0 --grpc 0 --hls 0 --bind 127.0.0.1
 ```
 
 ## Execution
@@ -147,9 +151,13 @@ Commands:
         runs CONNECT/CONNACK plus a PINGREQ/PINGRESP control round
         trip, then DISCONNECT. Pass --v5 for MQTT 5. Default port
         1883 plain, 8883 TLS.
-  grpc  gRPC ping — calls the standard
-        grpc.health.v1.Health/Check unary RPC. Accepts grpc:// /
+  grpc  gRPC ping — calls grpc.health.v1.Health/Check unary RPC by
+        default; pass --watch to call Health/Watch (server-stream)
+        and time the first SERVING message instead. Accepts grpc:// /
         http:// (plaintext H2C) or grpcs:// / https:// (TLS).
+  hls   HLS ping — fetches the M3U8 (following a variant if the URL
+        is a master playlist), then time-to-first-byte of the first
+        segment via a Range: bytes=0-0 request.
 
 Options:
   -c, --count <COUNT>  ping times [default: 3]
@@ -367,9 +375,17 @@ $ knockknock mqtt mqtt://broker.hivemq.com --client-id my-client-id
 ### gRPC
 
 Calls the standard
-[gRPC Health Checking Protocol](https://github.com/grpc/grpc/blob/master/doc/health-checking.md)
-`grpc.health.v1.Health/Check` unary RPC. The pinger reports success
-only when the server returns `SERVING`.
+[gRPC Health Checking Protocol](https://github.com/grpc/grpc/blob/master/doc/health-checking.md):
+
+- default — `Health/Check` (unary). Returns immediately with current status.
+- `--watch` — `Health/Watch` (server-streaming). Server **must** send
+  the current status as its first message per spec, so this measures
+  the open-stream-to-first-message RTT instead of the unary
+  request/response RTT. Useful when you want to know how fast a
+  streaming RPC starts producing data, not just whether the endpoint
+  is up.
+
+Both report success only when the first response status is `SERVING`.
 
 Schemes:
 - `grpc://`  or `http://`   → plaintext H2C
@@ -404,6 +420,44 @@ $ knockknock grpc grpcs://api.example.com:443 -c 3
 $ knockknock grpc grpc://localhost:18006 --service my.package.Service
 ```
 
+#### Streaming (Health.Watch)
+
+```shell
+$ knockknock grpc grpc://localhost:18006 --watch -c 3
+```
+
+### HLS
+
+Captures the player-visible startup latency on an HLS endpoint:
+
+1. `GET` the M3U8 you point at — master or media playlist
+2. if it was a master playlist, follow the first `EXT-X-STREAM-INF`
+   variant and `GET` that media playlist too
+3. `GET` the first segment with `Range: bytes=0-0` — measures
+   time-to-first-byte without paying the whole segment download
+
+The single `time=` the pinger reports covers all three (or two)
+GETs plus TLS handshake when the URL is `https://`.
+
+#### Media playlist directly
+
+```shell
+$ knockknock hls http://localhost:18007/playlist.m3u8 -c 3
+DNS lookup: [[::1]:18007, 127.0.0.1:18007]
+http://localhost:18007/playlist.m3u8: time=  13.91733 ms
+http://localhost:18007/playlist.m3u8: time=  14.05038 ms
+http://localhost:18007/playlist.m3u8: time=  13.39263 ms
+----- statistic -----
+total time: 41.360333ms
+Connect time: 3, recv time: 3 (100%), lose time: 0 (0%)
+```
+
+#### Master playlist (variant resolution included)
+
+```shell
+$ knockknock hls https://example.com/stream/master.m3u8
+```
+
 ## MCP server (`knockknock-mcp`)
 
 A second binary, `knockknock-mcp`, exposes every protocol as a typed
@@ -435,6 +489,8 @@ than statistical RTT):
 | `dns_ping`  | `server`, `query`    | `record_type` (a/aaaa/cname/mx/ns/txt), `count`, `timeout_ms` |
 | `mqtt_ping` | `broker`             | `client_id`, `v5` (bool), `count`, `timeout_ms`             |
 | `grpc_ping` | `endpoint`           | `service`, `count`, `timeout_ms`                            |
+| `grpc_watch_ping` | `endpoint`     | `service`, `count`, `timeout_ms` — `Health/Watch` server-stream |
+| `hls_ping`  | `url`                | `count`, `timeout_ms`                                       |
 
 Every tool returns the same shape:
 

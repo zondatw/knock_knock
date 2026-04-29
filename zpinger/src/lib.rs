@@ -6,6 +6,7 @@ mod test_pinger;
 
 mod dns;
 mod grpc;
+mod hls;
 mod http;
 mod level4;
 mod mqtt;
@@ -15,7 +16,8 @@ pub mod uri;
 mod websocket;
 
 pub use crate::dns::{DnsPinger, RecordType};
-pub use crate::grpc::GrpcPinger;
+pub use crate::grpc::{GrpcPinger, GrpcStreamPinger};
+pub use crate::hls::HlsPinger;
 pub use crate::http::{HttpMethod, HttpPinger};
 pub use crate::level4::{TcpPinger, UdpPinger};
 pub use crate::mqtt::{MqttPinger, MqttVersion};

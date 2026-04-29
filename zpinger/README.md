@@ -1,0 +1,255 @@
+# zpinger
+
+Async, protocol-agnostic latency probe library. Every protocol
+implements the same `Pinger` trait — call `ping().await` and get
+real round-trip time across the application layer, not just whether
+a TCP socket opens.
+
+Powers the [`knockknock`](https://crates.io/crates/knockknock) CLI;
+also usable directly from any Rust async application.
+
+## Supported protocols
+
+| Struct             | Schemes                                            | Measures                                                |
+| ------------------ | -------------------------------------------------- | ------------------------------------------------------- |
+| `TcpPinger`        | `host:port`                                        | TCP connect + 1-byte probe + read                       |
+| `UdpPinger`        | `host:port`                                        | UDP send + recv from ephemeral local socket             |
+| `HttpPinger`       | `http://`, `https://`                              | Full HTTP/1.1 request + status-line validation          |
+| `WebSocketPinger`  | `ws://`, `wss://`                                  | RFC 6455 upgrade + control PING/PONG round trip         |
+| `DnsPinger`        | host or host:port (default port 53)                | UDP query + response validation (ID / QR / RCODE / question echo) |
+| `MqttPinger`       | `mqtt://`, `mqtts://` (3.1.1 default; v5 opt-in)   | CONNECT/CONNACK + PINGREQ/PINGRESP + DISCONNECT         |
+| `GrpcPinger`       | `grpc://` / `http://` plaintext, `grpcs://` / `https://` TLS | `grpc.health.v1.Health/Check` unary RPC          |
+
+TLS for `https://` / `wss://` / `mqtts://` / `grpcs://` is handled by
+[`rustls`](https://github.com/rustls/rustls) with the Mozilla root CA
+bundle from
+[`webpki-roots`](https://github.com/rustls/webpki-roots) — pure Rust,
+no system trust store dependency.
+
+## Install
+
+```toml
+[dependencies]
+zpinger = "0.4"
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+```
+
+`zpinger` requires a tokio runtime — the `Pinger` trait is async, so
+your application needs to be async too. Any tokio runtime works
+(current-thread or multi-thread).
+
+## Quick start
+
+```rust
+use std::time::Duration;
+use zpinger::{Pinger, TcpPinger, timed};
+
+#[tokio::main]
+async fn main() -> std::io::Result<()> {
+    let p = TcpPinger::new("example.com:80").with_timeout(Duration::from_secs(2));
+    let elapsed = timed(&p).await?;
+    println!("TCP RTT: {elapsed:?}");
+    Ok(())
+}
+```
+
+## The `Pinger` trait
+
+```rust
+#[async_trait::async_trait]
+pub trait Pinger: Send + Sync {
+    async fn ping(&self) -> std::io::Result<()>;
+}
+```
+
+`Ok(())` means the protocol-level exchange completed; `Err` carries
+the underlying I/O or protocol error. Use `zpinger::timed(pinger)`
+for the elapsed time of a single ping. The trait is object-safe via
+[`async-trait`](https://crates.io/crates/async-trait), so
+`Box<dyn Pinger>` works for heterogeneous dispatch.
+
+## Per-protocol examples
+
+### TCP
+
+```rust
+use zpinger::{Pinger, TcpPinger};
+
+let p = TcpPinger::new("example.com:80");
+p.ping().await?;
+```
+
+### UDP
+
+```rust
+use zpinger::{Pinger, UdpPinger};
+
+let p = UdpPinger::new("203.0.113.1:5353");
+p.ping().await?;
+```
+
+### HTTP / HTTPS
+
+```rust
+use zpinger::{HttpMethod, HttpPinger, Pinger};
+
+// Plain HTTP GET
+HttpPinger::new(HttpMethod::Get, "http://example.com/")
+    .ping()
+    .await?;
+
+// HTTPS POST — TLS handled automatically via the scheme
+HttpPinger::new(HttpMethod::Post, "https://api.example.com/v1/echo")
+    .ping()
+    .await?;
+```
+
+### WebSocket / WSS
+
+```rust
+use zpinger::{Pinger, WebSocketPinger};
+
+// ws:// runs the RFC 6455 upgrade + a control PING/PONG round trip
+WebSocketPinger::new("ws://localhost:8080/")
+    .ping()
+    .await?;
+
+// wss:// reuses the rustls + webpki-roots TLS stack
+WebSocketPinger::new("wss://echo.websocket.events/")
+    .ping()
+    .await?;
+```
+
+### DNS
+
+```rust
+use zpinger::{DnsPinger, Pinger, RecordType};
+
+DnsPinger::new("8.8.8.8", "example.com")
+    .with_record_type(RecordType::Aaaa)
+    .ping()
+    .await?;
+```
+
+### MQTT (3.1.1 default, MQTT 5 opt-in)
+
+```rust
+use zpinger::{MqttPinger, MqttVersion, Pinger};
+
+// Plain mqtt:// (default port 1883), MQTT 3.1.1
+MqttPinger::new("mqtt://broker.hivemq.com")
+    .ping()
+    .await?;
+
+// mqtts:// (default port 8883) with MQTT 5 + custom client id
+MqttPinger::new("mqtts://broker.example.com:8883")
+    .with_client_id("my-client")
+    .with_version(MqttVersion::V5)
+    .ping()
+    .await?;
+```
+
+### gRPC
+
+Calls the standard
+[gRPC Health Checking Protocol](https://github.com/grpc/grpc/blob/master/doc/health-checking.md)
+`grpc.health.v1.Health/Check` unary RPC. Reports success when the
+server returns `SERVING`.
+
+```rust
+use zpinger::{GrpcPinger, Pinger};
+
+// Plaintext H2C
+GrpcPinger::new("grpc://localhost:50051")
+    .ping()
+    .await?;
+
+// TLS via webpki-roots default trust
+GrpcPinger::new("grpcs://api.example.com:443")
+    .with_service("my.package.Service")
+    .ping()
+    .await?;
+```
+
+## Heterogeneous dispatch via `Box<dyn Pinger>`
+
+```rust
+use std::time::Duration;
+use zpinger::{HttpMethod, HttpPinger, Pinger, TcpPinger, timed};
+
+let pingers: Vec<Box<dyn Pinger>> = vec![
+    Box::new(TcpPinger::new("example.com:80")),
+    Box::new(HttpPinger::new(HttpMethod::Get, "https://example.com/")),
+];
+
+for p in &pingers {
+    let elapsed = timed(p.as_ref()).await?;
+    println!("RTT: {elapsed:?}");
+}
+```
+
+## TLS configuration
+
+Every TLS-aware pinger (`HttpPinger`, `WebSocketPinger`,
+`MqttPinger`, `GrpcPinger`) ships with a sensible default that
+trusts public CAs via `webpki-roots`. For self-signed test
+endpoints, inject a custom config:
+
+```rust
+use std::sync::Arc;
+use zpinger::{ClientConfig, HttpMethod, HttpPinger, Pinger};
+
+// Build whatever rustls ClientConfig you like — e.g. a custom
+// trust anchor for a self-signed test endpoint.
+let config: Arc<ClientConfig> = build_my_test_config();
+
+HttpPinger::new(HttpMethod::Get, "https://localhost:8443/health")
+    .with_tls_config(config)
+    .ping()
+    .await?;
+```
+
+`GrpcPinger` uses `with_ca_cert(pem_bytes)` instead — tonic's TLS
+config takes a different shape.
+
+## Timeouts
+
+Every pinger struct has `.with_timeout(Duration)`. The default is 5
+seconds. The whole `ping()` call respects the timeout (not just
+each I/O op individually) — if your handshake stalls halfway, you
+still get the timeout error.
+
+```rust
+use std::time::Duration;
+use zpinger::{Pinger, TcpPinger};
+
+TcpPinger::new("slow.example.com:80")
+    .with_timeout(Duration::from_millis(500))
+    .ping()
+    .await?;
+```
+
+## Resolve helper
+
+For showing what the pinger will actually connect to (the CLI uses
+this for the `DNS lookup: ...` banner):
+
+```rust
+let addrs = zpinger::resolve("https://example.com").await;
+// ↑ defaults to port 443 because of the https scheme.
+```
+
+`resolve` returns an empty `Vec` on failure rather than panicking —
+the actual pinger surfaces the real error when you call it.
+
+## CLI + MCP
+
+If you want to use the same probes from a shell or from an AI agent
+without writing Rust, install the
+[`knockknock`](https://crates.io/crates/knockknock) CLI. It also
+ships an optional `knockknock-mcp` Model Context Protocol server
+behind the `mcp` feature.
+
+## License
+
+MIT — same as `knockknock`. See [LICENSE](../LICENSE).

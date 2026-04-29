@@ -2,11 +2,14 @@
 name = "zpinger"
 version = "0.4.0"
 authors = ["Zonda Yang <u226699@gmail.com>"]
-description = "zonda pinger library"
+description = "Async, protocol-agnostic latency probe library: TCP / UDP / HTTP(S) / WebSocket / DNS / MQTT / gRPC"
 homepage = "https://github.com/zondatw/knock_knock"
 repository = "https://github.com/zondatw/knock_knock"
 edition = "2021"
 license = "MIT"
+readme = "README.md"
+keywords = ["ping", "latency", "network", "protocol", "async"]
+categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 async-trait = "0.1"

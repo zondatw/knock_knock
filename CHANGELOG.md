@@ -7,7 +7,7 @@ version of each published crate.
 
 ## [Unreleased]
 
-## [1.4.0] / zpinger 0.4.0 — 2026-04-29
+## [1.5.0] / zpinger 0.5.0 — 2026-04-29
 
 ### Added
 - **HLS pinger** (`zpinger::HlsPinger`). Captures realistic
@@ -31,7 +31,15 @@ version of each published crate.
   (default 18007) — minimal HLS responder serving
   `/playlist.m3u8`, `/master.m3u8`, and `/segment0.ts` (with proper
   `Range: bytes=0-0` → 206 Partial Content support).
+- **`zpinger` README + crates.io metadata** — first published
+  README for the library crate; covers the trait, every pinger
+  struct, TLS config, `Box<dyn Pinger>` dispatch, and a pointer to
+  the CLI / MCP binaries. Cargo manifest gains `description`,
+  `keywords`, `categories`, and `readme = "README.md"`.
 
+## [1.4.0] / zpinger 0.4.0 — 2026-04-29
+
+### Added
 - **`knockknock-mcp` binary** — Model Context Protocol server
   exposing every pinger as a typed tool over stdio, gated behind the
   new `mcp` feature so default installs stay slim. Built on

@@ -11,10 +11,10 @@ use tokio::net::TcpStream;
 use tokio_rustls::TlsConnector;
 use tokio_tungstenite::tungstenite::Message;
 
-use crate::level4::with_timeout;
 use crate::pinger::Pinger;
 use crate::tls::default_client_config;
 use crate::uri::{get_uri, URI};
+use crate::util::with_timeout;
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
 

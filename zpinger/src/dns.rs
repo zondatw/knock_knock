@@ -4,9 +4,9 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use async_trait::async_trait;
 use tokio::net::UdpSocket;
 
-use crate::level4::with_timeout;
 use crate::pinger::Pinger;
 use crate::uri::get_uri;
+use crate::util::with_timeout;
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
 const DEFAULT_PORT: u16 = 53;

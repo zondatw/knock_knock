@@ -43,3 +43,35 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --workspace
+
+  features:
+    name: zpinger feature matrix
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Each entry is a comma-separated list of zpinger features
+        # (or empty for `--no-default-features` with nothing on top).
+        # Default + `all` are already covered by the `test` job.
+        feature_set:
+          - ""                    # no features → trait + uri + util only
+          - "tcp"
+          - "udp"
+          - "dns"
+          - "tcp,udp,dns"         # the no-TLS minimal real config
+          - "http"                # pulls _tls
+          - "ws"                  # _tls + tokio-tungstenite + futures-util
+          - "mqtt"                # _tls (shared)
+          - "hls"                 # _tls (shared)
+          - "grpc"                # tonic stack, separate from _tls
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo check ${{ matrix.feature_set || 'no-features' }}
+        run: |
+          if [ -z "${{ matrix.feature_set }}" ]; then
+            cargo check -p zpinger --no-default-features
+          else
+            cargo check -p zpinger --no-default-features --features "${{ matrix.feature_set }}"
+          fi

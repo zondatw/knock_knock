@@ -30,13 +30,46 @@ no system trust store dependency.
 
 ```toml
 [dependencies]
-zpinger = "0.4"
+zpinger = "0.6"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
 `zpinger` requires a tokio runtime — the `Pinger` trait is async, so
 your application needs to be async too. Any tokio runtime works
 (current-thread or multi-thread).
+
+### Pick only the protocols you need
+
+Every protocol is its own Cargo feature. The default is `all`, which
+matches pre-0.6 behavior — upgrade and you keep getting everything.
+But if you only want, say, TCP probing in an embedded-style binary,
+opt out of the default and pick what you need:
+
+```toml
+# TCP / UDP / DNS only — no TLS, no HTTP stack, no tonic.
+zpinger = { version = "0.6", default-features = false, features = ["tcp", "udp", "dns"] }
+```
+
+```toml
+# HTTPS but no gRPC.
+zpinger = { version = "0.6", default-features = false, features = ["http"] }
+```
+
+| Feature | Pinger struct(s) exposed             | What pulls in                          |
+| ------- | ------------------------------------ | -------------------------------------- |
+| `tcp`   | `TcpPinger`                          | nothing extra (tokio is always there)  |
+| `udp`   | `UdpPinger`                          | nothing extra                          |
+| `dns`   | `DnsPinger`, `RecordType`            | nothing extra                          |
+| `http`  | `HttpPinger`, `HttpMethod`           | rustls + tokio-rustls + webpki-roots   |
+| `ws`    | `WebSocketPinger`                    | http TLS + tokio-tungstenite + futures-util |
+| `mqtt`  | `MqttPinger`, `MqttVersion`          | http TLS (shared)                      |
+| `hls`   | `HlsPinger`                          | http TLS (shared)                      |
+| `grpc`  | `GrpcPinger`, `GrpcStreamPinger`     | tonic + tonic-health + (tonic's own TLS stack) |
+| `all`   | all of the above                     | all of the above                       |
+
+The `Pinger` trait, `timed`, `resolve`, and the URI parser are
+always compiled regardless of which features you pick — they're the
+crate's core surface.
 
 ## Quick start
 

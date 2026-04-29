@@ -4,29 +4,68 @@ use std::net::SocketAddr;
 #[cfg(test)]
 mod test_pinger;
 
-mod dns;
-mod grpc;
-mod hls;
-mod http;
-mod level4;
-mod mqtt;
+// Always compiled regardless of features — the `Pinger` trait, the
+// timed helper, the URI parser, and shared utilities. No protocol
+// implementations live in here.
 mod pinger;
-mod tls;
 pub mod uri;
-mod websocket;
+mod util;
 
-pub use crate::dns::{DnsPinger, RecordType};
-pub use crate::grpc::{GrpcPinger, GrpcStreamPinger};
-pub use crate::hls::HlsPinger;
-pub use crate::http::{HttpMethod, HttpPinger};
-pub use crate::level4::{TcpPinger, UdpPinger};
-pub use crate::mqtt::{MqttPinger, MqttVersion};
 pub use crate::pinger::{timed, Pinger};
+
+// TLS layer + rustls re-exports. Compiled whenever any protocol that
+// needs TLS is enabled (http / ws / mqtt / hls).
+#[cfg(feature = "_tls")]
+mod tls;
+#[cfg(feature = "_tls")]
 pub use crate::tls::default_client_config;
-pub use crate::websocket::WebSocketPinger;
+#[cfg(feature = "_tls")]
 pub use rustls::ClientConfig;
 
+// Per-protocol modules + re-exports — each gated behind its own
+// feature flag.
+#[cfg(any(feature = "tcp", feature = "udp"))]
+mod level4;
+#[cfg(feature = "tcp")]
+pub use crate::level4::TcpPinger;
+#[cfg(feature = "udp")]
+pub use crate::level4::UdpPinger;
+
+#[cfg(feature = "dns")]
+mod dns;
+#[cfg(feature = "dns")]
+pub use crate::dns::{DnsPinger, RecordType};
+
+#[cfg(feature = "http")]
+mod http;
+#[cfg(feature = "http")]
+pub use crate::http::{HttpMethod, HttpPinger};
+
+#[cfg(feature = "ws")]
+mod websocket;
+#[cfg(feature = "ws")]
+pub use crate::websocket::WebSocketPinger;
+
+#[cfg(feature = "mqtt")]
+mod mqtt;
+#[cfg(feature = "mqtt")]
+pub use crate::mqtt::{MqttPinger, MqttVersion};
+
+#[cfg(feature = "grpc")]
+mod grpc;
+#[cfg(feature = "grpc")]
+pub use crate::grpc::{GrpcPinger, GrpcStreamPinger};
+
+#[cfg(feature = "hls")]
+mod hls;
+#[cfg(feature = "hls")]
+pub use crate::hls::HlsPinger;
+
+// `BUF_SIZE` is shared by `level4` (tcp / udp) and `http`.
+// `HTTP_UNCONNECT_STATUS_CODE` is http-only.
+#[cfg(any(feature = "tcp", feature = "udp", feature = "http"))]
 pub(crate) const BUF_SIZE: usize = 0xFF;
+#[cfg(feature = "http")]
 pub(crate) const HTTP_UNCONNECT_STATUS_CODE: &[&str] = &["404", "501"];
 
 /// Resolve `url`'s host:port to a list of socket addresses for display.

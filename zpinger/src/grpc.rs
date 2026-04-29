@@ -19,8 +19,6 @@ use tonic_health::pb::health_check_response::ServingStatus;
 use tonic_health::pb::health_client::HealthClient;
 use tonic_health::pb::HealthCheckRequest;
 
-use futures_util::StreamExt;
-
 use crate::pinger::Pinger;
 use crate::uri::get_uri;
 
@@ -201,10 +199,10 @@ impl Pinger for GrpcStreamPinger {
             .map_err(|status| io::Error::other(format!("Health/Watch: {status}")))?;
         let mut stream = response.into_inner();
         let first = stream
-            .next()
+            .message()
             .await
-            .ok_or_else(|| io::Error::other("Watch stream closed before first message"))?
-            .map_err(|status| io::Error::other(format!("Watch stream error: {status}")))?;
+            .map_err(|status| io::Error::other(format!("Watch stream error: {status}")))?
+            .ok_or_else(|| io::Error::other("Watch stream closed before first message"))?;
         if first.status != ServingStatus::Serving as i32 {
             return Err(io::Error::other(format!(
                 "first watched status was {} (expected SERVING=1)",

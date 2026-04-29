@@ -19,10 +19,10 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio_rustls::TlsConnector;
 
-use crate::level4::with_timeout;
 use crate::pinger::Pinger;
 use crate::tls::default_client_config;
 use crate::uri::{get_uri, URI};
+use crate::util::with_timeout;
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
 const DEFAULT_PORT_PLAIN: u16 = 1883;

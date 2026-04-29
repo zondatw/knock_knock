@@ -1,6 +1,6 @@
 [package]
 name = "zpinger"
-version = "0.5.0"
+version = "0.6.0"
 authors = ["Zonda Yang <u226699@gmail.com>"]
 description = "Async, protocol-agnostic latency probe library: TCP / UDP / HTTP(S) / WebSocket / DNS / MQTT / gRPC / HLS"
 homepage = "https://github.com/zondatw/knock_knock"

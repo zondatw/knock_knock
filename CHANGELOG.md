@@ -7,6 +7,28 @@ version of each published crate.
 
 ## [Unreleased]
 
+## [1.6.0] / zpinger 0.6.0 — 2026-04-29
+
+### Added
+- **Per-protocol Cargo features for `zpinger`.** Each pinger lives
+  behind its own feature: `tcp`, `udp`, `dns`, `http`, `ws`, `mqtt`,
+  `hls`, `grpc`. `default = ["all"]` preserves pre-0.6 behavior so
+  existing users see no change; downstream crates that only need a
+  subset can `default-features = false, features = ["tcp", "udp",
+  "dns"]` and skip rustls / tonic / tokio-tungstenite entirely. The
+  `Pinger` trait, `timed`, `resolve`, and the URI parser are always
+  compiled — they are the crate's core surface.
+- CI feature matrix job that runs `cargo check -p zpinger
+  --no-default-features --features <set>` across ten combinations to
+  keep the gates honest.
+
+### Changed
+- `zpinger/src/util.rs` extracted out of `level4.rs` so
+  `with_timeout` is shared cleanly across feature subsets.
+- `GrpcStreamPinger` now uses tonic's native
+  `Streaming::message()` instead of `futures_util::StreamExt::next()`,
+  so the `grpc` feature no longer pulls in `futures-util`.
+
 ## [1.5.0] / zpinger 0.5.0 — 2026-04-29
 
 ### Added

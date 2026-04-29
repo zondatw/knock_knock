@@ -33,6 +33,10 @@ struct Args {
     #[arg(long, default_value_t = 18005)]
     mqtt: u16,
 
+    /// gRPC (grpc://, plaintext H2C) port (use 0 for ephemeral)
+    #[arg(long, default_value_t = 18006)]
+    grpc: u16,
+
     /// Bind address (default 0.0.0.0; use 127.0.0.1 for loopback only)
     #[arg(long, default_value = "0.0.0.0")]
     bind: String,
@@ -73,6 +77,9 @@ fn main() {
     let mqtt = start_or_die("mqtt", args.mqtt, || {
         testserver::start_mqtt_ok(format!("{bind}:{}", args.mqtt))
     });
+    let grpc = start_or_die("grpc", args.grpc, || {
+        testserver::start_grpc_ok(format!("{bind}:{}", args.grpc))
+    });
 
     println!("[tcp]  listening on {tcp}");
     println!("[udp]  listening on {udp}");
@@ -80,6 +87,7 @@ fn main() {
     println!("[ws]   listening on {ws}");
     println!("[dns]  listening on {dns}");
     println!("[mqtt] listening on {mqtt}");
+    println!("[grpc] listening on {grpc}");
     println!();
     println!("Try in another terminal:");
     println!("  knockknock tcp localhost:{}", tcp.port());
@@ -88,6 +96,7 @@ fn main() {
     println!("  knockknock ws ws://localhost:{}/", ws.port());
     println!("  knockknock dns 127.0.0.1:{} -q example.com", dns.port());
     println!("  knockknock mqtt mqtt://localhost:{}", mqtt.port());
+    println!("  knockknock grpc grpc://localhost:{}", grpc.port());
     println!();
     println!("Press Ctrl+C to stop.");
 

@@ -7,6 +7,26 @@ version of each published crate.
 
 ## [Unreleased]
 
+### Added
+- **gRPC pinger** (`zpinger::GrpcPinger`). Calls the standard
+  [gRPC Health Checking Protocol](https://github.com/grpc/grpc/blob/master/doc/health-checking.md)
+  `grpc.health.v1.Health/Check` unary RPC via `tonic` 0.12 and
+  `tonic-health`. Validates the response status equals `SERVING`.
+  Builder mirrors the other pingers: `::new(endpoint)`,
+  `.with_service(name)`, `.with_timeout(d)`,
+  `.with_ca_cert(pem_bytes)`. Accepts both `grpc://` / `http://`
+  for plaintext H2C and `grpcs://` / `https://` for TLS;
+  schemeless host:port defaults to plaintext H2C. The TLS path
+  uses tonic's `tls-webpki-roots` feature for the public-CA
+  default trust store, with `with_ca_cert` overriding it for
+  self-signed test endpoints.
+- `knockknock grpc <endpoint> [--service NAME]` subcommand.
+- `testserver::start_grpc_ok` (plaintext) and `start_grpcs_ok`
+  (TLS, returns the self-signed cert PEM as a trust anchor) plus
+  `testserver --grpc <port>` (default 18006). The server is built
+  on `tonic-health::server`, runs in a tokio runtime spawned in a
+  background thread to keep the testserver lib's surface API sync.
+
 ### Changed (BREAKING)
 - **`Pinger` trait is now `async`** — `async fn ping(&self) -> Result<()>`
   via the `async-trait` macro for object-safety. All seven existing

@@ -7,6 +7,8 @@ version of each published crate.
 
 ## [Unreleased]
 
+## [1.3.0] / zpinger 0.4.0 — 2026-04-29
+
 ### Added
 - **gRPC pinger** (`zpinger::GrpcPinger`). Calls the standard
   [gRPC Health Checking Protocol](https://github.com/grpc/grpc/blob/master/doc/health-checking.md)

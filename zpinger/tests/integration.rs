@@ -557,3 +557,161 @@ async fn dns_pinger_rejects_response_with_tampered_question() {
         "unexpected error message: {err}"
     );
 }
+
+// -- TLS handshake pinger -------------------------------------------------
+
+#[tokio::test]
+async fn tls_pinger_succeeds_with_trusted_cert() {
+    let server = testserver::start_https_ok("127.0.0.1:0").unwrap();
+    let target = format!("localhost:{}", server.addr.port());
+    zpinger::TlsPinger::new(target)
+        .with_tls_config(server.client_config)
+        .ping()
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn tls_pinger_fails_without_trust_anchor() {
+    let server = testserver::start_https_ok("127.0.0.1:0").unwrap();
+    let target = format!("localhost:{}", server.addr.port());
+    // No `with_tls_config` → defaults to webpki-roots, which doesn't
+    // trust the test cert.
+    let err = zpinger::TlsPinger::new(target)
+        .with_timeout(Duration::from_secs(2))
+        .ping()
+        .await
+        .expect_err("should fail without trust anchor");
+    let msg = err.to_string().to_lowercase();
+    assert!(
+        msg.contains("certificate") || msg.contains("trust") || msg.contains("unknown"),
+        "unexpected TLS error: {err}"
+    );
+}
+
+#[tokio::test]
+async fn tls_pinger_fails_on_closed_port() {
+    let target = closed_tcp_addr();
+    let p = zpinger::TlsPinger::new(target).with_timeout(Duration::from_millis(500));
+    assert!(p.ping().await.is_err());
+}
+
+#[tokio::test]
+async fn tls_pinger_usable_as_trait_object() {
+    let server = testserver::start_https_ok("127.0.0.1:0").unwrap();
+    let target = format!("localhost:{}", server.addr.port());
+    let p: Box<dyn Pinger> =
+        Box::new(zpinger::TlsPinger::new(target).with_tls_config(server.client_config));
+    p.ping().await.unwrap();
+}
+
+// -- NTP pinger -----------------------------------------------------------
+
+#[tokio::test]
+async fn ntp_pinger_succeeds() {
+    let addr = testserver::start_ntp_ok("127.0.0.1:0").unwrap();
+    zpinger::NtpPinger::new(addr.to_string())
+        .ping()
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn ntp_pinger_with_custom_timeout() {
+    let addr = testserver::start_ntp_ok("127.0.0.1:0").unwrap();
+    zpinger::NtpPinger::new(addr.to_string())
+        .with_timeout(Duration::from_secs(1))
+        .ping()
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn ntp_pinger_times_out_on_silent_port() {
+    use std::net::UdpSocket;
+    let server = UdpSocket::bind("127.0.0.1:0").unwrap();
+    let addr = server.local_addr().unwrap();
+    let p = zpinger::NtpPinger::new(addr.to_string()).with_timeout(Duration::from_millis(200));
+    assert!(p.ping().await.is_err());
+}
+
+#[tokio::test]
+async fn ntp_pinger_usable_as_trait_object() {
+    let addr = testserver::start_ntp_ok("127.0.0.1:0").unwrap();
+    let p: Box<dyn Pinger> = Box::new(zpinger::NtpPinger::new(addr.to_string()));
+    p.ping().await.unwrap();
+}
+
+// -- STUN pinger ----------------------------------------------------------
+
+#[tokio::test]
+async fn stun_pinger_succeeds() {
+    let addr = testserver::start_stun_ok("127.0.0.1:0").unwrap();
+    zpinger::StunPinger::new(addr.to_string())
+        .ping()
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn stun_pinger_with_custom_timeout() {
+    let addr = testserver::start_stun_ok("127.0.0.1:0").unwrap();
+    zpinger::StunPinger::new(addr.to_string())
+        .with_timeout(Duration::from_secs(1))
+        .ping()
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn stun_pinger_times_out_on_silent_port() {
+    use std::net::UdpSocket;
+    let server = UdpSocket::bind("127.0.0.1:0").unwrap();
+    let addr = server.local_addr().unwrap();
+    let p = zpinger::StunPinger::new(addr.to_string()).with_timeout(Duration::from_millis(200));
+    assert!(p.ping().await.is_err());
+}
+
+#[tokio::test]
+async fn stun_pinger_usable_as_trait_object() {
+    let addr = testserver::start_stun_ok("127.0.0.1:0").unwrap();
+    let p: Box<dyn Pinger> = Box::new(zpinger::StunPinger::new(addr.to_string()));
+    p.ping().await.unwrap();
+}
+
+// -- TURN pinger ----------------------------------------------------------
+
+#[tokio::test]
+async fn turn_pinger_succeeds_on_401_response() {
+    let addr = testserver::start_turn_ok("127.0.0.1:0").unwrap();
+    zpinger::TurnPinger::new(addr.to_string())
+        .ping()
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn turn_pinger_with_custom_timeout() {
+    let addr = testserver::start_turn_ok("127.0.0.1:0").unwrap();
+    zpinger::TurnPinger::new(addr.to_string())
+        .with_timeout(Duration::from_secs(1))
+        .ping()
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn turn_pinger_times_out_on_silent_port() {
+    use std::net::UdpSocket;
+    let server = UdpSocket::bind("127.0.0.1:0").unwrap();
+    let addr = server.local_addr().unwrap();
+    let p = zpinger::TurnPinger::new(addr.to_string()).with_timeout(Duration::from_millis(200));
+    assert!(p.ping().await.is_err());
+}
+
+#[tokio::test]
+async fn turn_pinger_usable_as_trait_object() {
+    let addr = testserver::start_turn_ok("127.0.0.1:0").unwrap();
+    let p: Box<dyn Pinger> = Box::new(zpinger::TurnPinger::new(addr.to_string()));
+    p.ping().await.unwrap();
+}

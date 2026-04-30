@@ -7,6 +7,37 @@ version of each published crate.
 
 ## [Unreleased]
 
+### Added
+- **TLS handshake pinger** (`zpinger::TlsPinger`) — TCP connect +
+  TLS handshake (ClientHello → ServerHello → Certificate →
+  Finished), then close. Reports success when the handshake
+  completes; cert validation errors surface as protocol errors.
+  Reuses the existing rustls + webpki-roots stack;
+  `with_tls_config` overrides for self-signed test endpoints. Use
+  this for cert / handshake monitoring without conflating HTTP
+  response time. Default port 443. CLI: `knockknock tls <target>`.
+  MCP: `tls_ping`. Feature: `tls`.
+- **NTP pinger** (`zpinger::NtpPinger`) — sends one 48-byte NTP v4
+  client packet (RFC 5905 §7.3) over UDP and validates the server
+  reply (mode field, version echo). Default port 123. Hand-rolled
+  wire format, no extra deps. CLI: `knockknock ntp <server>`.
+  MCP: `ntp_ping`. Feature: `ntp`.
+- **STUN pinger** (`zpinger::StunPinger`) — sends one Binding
+  Request (RFC 5389 §6) and validates the Binding Success Response
+  (message type, magic cookie, transaction ID echo). Default port
+  3478. Hand-rolled wire format. CLI: `knockknock stun <server>`.
+  MCP: `stun_ping`. Feature: `stun`.
+- **TURN pinger** (`zpinger::TurnPinger`) — sends one
+  unauthenticated Allocate Request (RFC 5766 §6.1) with the
+  REQUESTED-TRANSPORT attribute and treats the expected
+  `401 Unauthorized` Allocate Error Response as a successful
+  liveness check. The 401 IS the success signal — no actual relay
+  state allocated, no credentials needed, safe to spam against
+  shared TURN infrastructure. Default port 3478. CLI:
+  `knockknock turn <server>`. MCP: `turn_ping`. Feature: `turn`.
+- **testserver gains `start_ntp_ok` / `start_stun_ok` /
+  `start_turn_ok`** for the integration tests above.
+
 ## [1.6.0] / zpinger 0.6.0 — 2026-04-29
 
 ### Added

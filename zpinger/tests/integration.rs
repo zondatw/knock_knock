@@ -838,3 +838,106 @@ async fn rtmp_pinger_usable_as_trait_object() {
     )));
     p.ping().await.unwrap();
 }
+
+// -- QUIC pinger ----------------------------------------------------------
+
+#[tokio::test]
+async fn quic_pinger_succeeds_with_trusted_cert() {
+    let server = testserver::start_quic_ok("127.0.0.1:0").unwrap();
+    zpinger::QuicPinger::new(format!("localhost:{}", server.addr.port()))
+        .with_tls_config(server.client_config)
+        .ping()
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn quic_pinger_fails_without_trust_anchor() {
+    let server = testserver::start_quic_ok("127.0.0.1:0").unwrap();
+    // No `with_tls_config` → defaults to webpki-roots, which doesn't
+    // trust the test cert.
+    let err = zpinger::QuicPinger::new(format!("localhost:{}", server.addr.port()))
+        .with_timeout(Duration::from_secs(2))
+        .ping()
+        .await
+        .expect_err("should fail without trust anchor");
+    let msg = err.to_string().to_lowercase();
+    assert!(
+        msg.contains("certificate")
+            || msg.contains("trust")
+            || msg.contains("unknown")
+            || msg.contains("handshake"),
+        "unexpected QUIC error: {err}"
+    );
+}
+
+#[tokio::test]
+async fn quic_pinger_with_custom_timeout() {
+    let server = testserver::start_quic_ok("127.0.0.1:0").unwrap();
+    zpinger::QuicPinger::new(format!("localhost:{}", server.addr.port()))
+        .with_tls_config(server.client_config)
+        .with_timeout(Duration::from_secs(2))
+        .ping()
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn quic_pinger_times_out_on_silent_port() {
+    use std::net::UdpSocket;
+    let sock = UdpSocket::bind("127.0.0.1:0").unwrap();
+    let addr = sock.local_addr().unwrap();
+    // No QUIC server replying — handshake will stall, our timeout
+    // wins.
+    let err = zpinger::QuicPinger::new(format!("localhost:{}", addr.port()))
+        .with_timeout(Duration::from_millis(300))
+        .ping()
+        .await
+        .expect_err("silent UDP port should time out");
+    assert!(
+        err.kind() == std::io::ErrorKind::TimedOut
+            || err.to_string().to_lowercase().contains("timed out")
+            || err.to_string().to_lowercase().contains("timeout"),
+        "expected timeout error, got: {err}"
+    );
+}
+
+#[tokio::test]
+async fn quic_pinger_rejects_unsupported_scheme() {
+    let p = zpinger::QuicPinger::new("ws://example.com:443").with_timeout(Duration::from_secs(1));
+    let err = p.ping().await.unwrap_err();
+    assert!(err.to_string().contains("scheme 'ws'"));
+}
+
+#[tokio::test]
+async fn quic_pinger_usable_as_trait_object() {
+    let server = testserver::start_quic_ok("127.0.0.1:0").unwrap();
+    let p: Box<dyn Pinger> = Box::new(
+        zpinger::QuicPinger::new(format!("localhost:{}", server.addr.port()))
+            .with_tls_config(server.client_config),
+    );
+    p.ping().await.unwrap();
+}
+
+#[tokio::test]
+async fn quic_pinger_with_alpn_override() {
+    let server = testserver::start_quic_ok("127.0.0.1:0").unwrap();
+    // Server only advertises h3; if we ask for hq-29 (HTTP/0.9-ish
+    // legacy QUIC ALPN) the handshake should fail with no overlap.
+    let err = zpinger::QuicPinger::new(format!("localhost:{}", server.addr.port()))
+        .with_tls_config(server.client_config)
+        .with_alpn(vec![b"hq-29".to_vec()])
+        .with_timeout(Duration::from_secs(2))
+        .ping()
+        .await
+        .expect_err("ALPN mismatch must fail");
+    assert!(
+        err.to_string().to_lowercase().contains("alpn")
+            || err.to_string().to_lowercase().contains("handshake")
+            || err
+                .to_string()
+                .to_lowercase()
+                .contains("no application protocol"),
+        "expected ALPN error, got: {err}"
+    );
+}

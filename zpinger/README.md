@@ -25,6 +25,7 @@ also usable directly from any Rust async application.
 | `TurnPinger`       | host or host:port (default port 3478)               | UDP Allocate Request + expected `401 Unauthorized` reply |
 | `RtspPinger`       | `rtsp://`, `rtsps://`                               | TCP + RFC 2326 OPTIONS request + `RTSP/1.0 200` validation |
 | `RtmpPinger`       | `rtmp://`, `rtmps://`                               | TCP + Adobe RTMP §5.2.1 simple handshake (C0/C1/S0/S1/S2/C2) |
+| `QuicPinger`       | `quic://`, `https://`, or `host:port` (port 443)    | UDP + RFC 9000 QUIC v1 handshake (TLS 1.3 + ALPN agreement) |
 
 TLS for `https://` / `wss://` / `mqtts://` / `grpcs://` is handled by
 [`rustls`](https://github.com/rustls/rustls) with the Mozilla root CA
@@ -77,6 +78,7 @@ zpinger = { version = "0.6", default-features = false, features = ["http"] }
 | `turn`  | `TurnPinger`                         | nothing extra (shares STUN's packet builder internally) |
 | `rtsp`  | `RtspPinger`                         | http TLS (shared) for `rtsps://`       |
 | `rtmp`  | `RtmpPinger`                         | http TLS (shared) for `rtmps://`       |
+| `quic`  | `QuicPinger`                         | quinn + (its own rustls-ring TLS stack) |
 | `all`   | all of the above                     | all of the above                       |
 
 The `Pinger` trait, `timed`, `resolve`, and the URI parser are
@@ -277,6 +279,23 @@ RtmpPinger::new("rtmp://ingest.example.com:1935/live")
 
 // rtmps:// runs over TLS/443
 RtmpPinger::new("rtmps://secure-ingest.example.com/live")
+    .ping()
+    .await?;
+```
+
+### QUIC
+
+```rust
+use zpinger::{Pinger, QuicPinger};
+
+// Plain HTTP/3 endpoint with default ALPN h3
+QuicPinger::new("https://www.cloudflare.com")
+    .ping()
+    .await?;
+
+// Custom ALPN list — useful for non-h3 stacks
+QuicPinger::new("quic://relay.example.com:8443")
+    .with_alpn(vec![b"hq-29".to_vec()])
     .ping()
     .await?;
 ```

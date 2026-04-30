@@ -119,6 +119,7 @@ $ cargo run -p testserver
 [turn] listening on 0.0.0.0:18010
 [rtsp] listening on 0.0.0.0:18011
 [rtmp] listening on 0.0.0.0:18012
+[quic] listening on 0.0.0.0:18013 (self-signed cert)
 
 Try in another terminal:
   knockknock tcp localhost:18000
@@ -135,13 +136,16 @@ Try in another terminal:
   knockknock turn localhost:18010
   knockknock rtsp rtsp://localhost:18011
   knockknock rtmp rtmp://localhost:18012
+  # quic uses a self-signed cert — see the QUIC section below for the
+  # ClientConfig-injection wiring (CLI flag isn't enough on its own).
+  knockknock quic localhost:18013
 ```
 
 If the default ports are taken, override them (use `0` for an OS-picked
 ephemeral port, or pass any specific number):
 
 ```shell
-$ cargo run -p testserver -- --tcp 0 --udp 0 --http 0 --ws 0 --dns 0 --mqtt 0 --grpc 0 --hls 0 --ntp 0 --stun 0 --turn 0 --rtsp 0 --rtmp 0 --bind 127.0.0.1
+$ cargo run -p testserver -- --tcp 0 --udp 0 --http 0 --ws 0 --dns 0 --mqtt 0 --grpc 0 --hls 0 --ntp 0 --stun 0 --turn 0 --rtsp 0 --rtmp 0 --quic 0 --bind 127.0.0.1
 ```
 
 `testserver` doesn't expose a TLS handshake fixture (the `tls` pinger
@@ -194,6 +198,10 @@ Commands:
         (C0+C1 → S0+S1+S2 → C2). rtmp:// (TCP/1935) and rtmps://
         (TLS/443) both accepted. Useful for live-streaming ingest
         monitoring.
+  quic  QUIC ping — completes an RFC 9000 v1 handshake (UDP +
+        TLS 1.3 + transport parameters + ALPN agreement) and
+        reports the time taken. Default port 443, default ALPN
+        h3. quic://, https://, or schemeless host:port accepted.
 
 Options:
   -c, --count <COUNT>  ping times [default: 3]
@@ -710,6 +718,62 @@ implementation:
 $ docker run --rm -p 1935:1935 tiangolo/nginx-rtmp &
 $ knockknock rtmp rtmp://127.0.0.1:1935 -c 3
 ```
+
+### QUIC
+
+Completes an RFC 9000 QUIC v1 handshake (UDP + TLS 1.3 + transport
+parameters + ALPN agreement) and reports the time taken. Doesn't open
+any HTTP/3 streams on top — the point is to isolate
+connection-establishment cost the way `tls` does for TCP+TLS, but for
+the QUIC stack. Default ALPN is `h3` so most production HTTP/3 servers
+accept the handshake; override via `--alpn` for `hq-29` / custom
+protocols.
+
+#### Real public HTTP/3 endpoints
+
+QUIC's TLS layer trusts webpki-roots by default, so any internet
+endpoint with a real cert works:
+
+```shell
+$ knockknock quic https://www.cloudflare.com -c 3
+DNS lookup: [104.16.132.229:443, 104.16.133.229:443]
+https://www.cloudflare.com: time=  18.34112 ms
+https://www.cloudflare.com: time=  16.92208 ms
+https://www.cloudflare.com: time=  17.25596 ms
+----- statistic -----
+total time: 52.519160ms
+Connect time: 3, recv time: 3 (100%), lose time: 0 (0%)
+
+$ knockknock quic www.google.com -c 3
+$ knockknock quic quic://cloudflare-quic.com:443 -c 3
+```
+
+#### Local fixture (testserver)
+
+`testserver`'s `--quic` port serves a freshly minted self-signed cert
+with ALPN `h3`. The CLI doesn't expose a `--insecure` / custom-CA
+flag (deliberately — production monitoring shouldn't bypass cert
+validation), so the canonical local-fixture wiring is the integration
+suite at `zpinger/tests/integration.rs::quic_pinger_succeeds_with_trusted_cert`,
+which feeds the fixture's `ClientConfig` into `QuicPinger::with_tls_config`.
+
+For end-to-end CLI validation against a real cert chain, point at any
+internet HTTP/3 endpoint as shown above. Both Cloudflare and Google
+expose stable QUIC v1 + h3 endpoints on port 443.
+
+#### Custom ALPN
+
+```shell
+# Force a non-h3 ALPN — useful for testing legacy QUIC stacks.
+$ knockknock quic relay.example.com:8443 --alpn hq-29 -c 3
+
+# Multiple ALPNs in preference order (server picks one):
+$ knockknock quic example.com --alpn h3,hq-29 -c 3
+```
+
+If the server doesn't support any ALPN you advertised the handshake
+fails with a `no application protocol` error — that's the
+ALPN-mismatch signal.
 
 ## MCP server (`knockknock-mcp`)
 

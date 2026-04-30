@@ -94,6 +94,11 @@ mod rtmp;
 #[cfg(feature = "rtmp")]
 pub use crate::rtmp::RtmpPinger;
 
+#[cfg(feature = "quic")]
+mod quic;
+#[cfg(feature = "quic")]
+pub use crate::quic::QuicPinger;
+
 // `BUF_SIZE` is shared by `level4` (tcp / udp) and `http`.
 // `HTTP_UNCONNECT_STATUS_CODE` is http-only.
 #[cfg(any(feature = "tcp", feature = "udp", feature = "http"))]

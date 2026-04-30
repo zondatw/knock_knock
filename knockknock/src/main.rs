@@ -4,8 +4,8 @@ use std::io::Result;
 use std::time::Duration;
 use zpinger::{
     DnsPinger, GrpcPinger, GrpcStreamPinger, HlsPinger, HttpPinger, MqttPinger, MqttVersion,
-    NtpPinger, Pinger, RtmpPinger, RtspPinger, StunPinger, TcpPinger, TlsPinger, TurnPinger,
-    UdpPinger, WebSocketPinger,
+    NtpPinger, Pinger, QuicPinger, RtmpPinger, RtspPinger, StunPinger, TcpPinger, TlsPinger,
+    TurnPinger, UdpPinger, WebSocketPinger,
 };
 
 #[derive(Parser)]
@@ -134,6 +134,19 @@ enum Command {
         /// RTMP target, e.g. `rtmp://host:1935` or `rtmps://host`.
         target: String,
     },
+    /// QUIC ping — completes an RFC 9000 QUIC v1 handshake (UDP +
+    /// TLS 1.3 + transport parameters + ALPN) and reports the time
+    /// taken. Default ALPN is `h3` (HTTP/3); pass --alpn to override.
+    /// `quic://`, `https://`, or schemeless `host:port` all accepted.
+    /// Default port 443.
+    Quic {
+        /// QUIC endpoint, e.g. `quic://host:443` or `example.com`.
+        endpoint: String,
+        /// ALPN protocol(s) to advertise, comma-separated. Default
+        /// is `h3`.
+        #[arg(long, default_value = "h3")]
+        alpn: String,
+    },
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
@@ -228,6 +241,7 @@ fn target_of(command: &Command) -> &str {
         Command::Turn { server } => server,
         Command::Rtsp { target } => target,
         Command::Rtmp { target } => target,
+        Command::Quic { endpoint, .. } => endpoint,
         Command::Http { method } => match method {
             HttpMethod::Connect { target }
             | HttpMethod::Get { target }
@@ -269,6 +283,18 @@ fn build_pinger(command: &Command) -> Box<dyn Pinger> {
         Command::Turn { server } => Box::new(TurnPinger::new(server.clone())),
         Command::Rtsp { target } => Box::new(RtspPinger::new(target.clone())),
         Command::Rtmp { target } => Box::new(RtmpPinger::new(target.clone())),
+        Command::Quic { endpoint, alpn } => {
+            let alpns: Vec<Vec<u8>> = alpn
+                .split(',')
+                .filter(|s| !s.is_empty())
+                .map(|s| s.as_bytes().to_vec())
+                .collect();
+            let mut p = QuicPinger::new(endpoint.clone());
+            if !alpns.is_empty() {
+                p = p.with_alpn(alpns);
+            }
+            Box::new(p)
+        }
         Command::Mqtt {
             broker,
             client_id,
@@ -360,6 +386,16 @@ async fn main() -> Result<()> {
             let scheme = zpinger::uri::get_uri(target).scheme.to_ascii_lowercase();
             let p = if scheme == "rtmps" { 443 } else { 1935 };
             default_port_target(target, p)
+        }
+        // QUIC always lands on 443 by default; if user passed
+        // `quic://host` strip the scheme so resolve() picks the right
+        // default port via `https://`-equivalent handling.
+        Command::Quic { endpoint, .. } => {
+            if let Some(rest) = endpoint.strip_prefix("quic://") {
+                format!("https://{rest}")
+            } else {
+                default_port_target(endpoint, 443)
+            }
         }
         _ => target.clone(),
     };
@@ -774,5 +810,32 @@ mod tests {
             let result = Cli::try_parse_from(["knockknock", cmd]);
             assert!(result.is_err(), "{cmd} should require a target");
         }
+    }
+
+    #[test]
+    fn parses_quic_subcommand() {
+        let cli = parse(&["knockknock", "quic", "quic://example.com:443"]);
+        match &cli.command {
+            Command::Quic { endpoint, alpn } => {
+                assert_eq!(endpoint, "quic://example.com:443");
+                assert_eq!(alpn, "h3");
+            }
+            other => panic!("expected Quic, got {:?}", std::mem::discriminant(other)),
+        }
+    }
+
+    #[test]
+    fn parses_quic_with_custom_alpn() {
+        let cli = parse(&["knockknock", "quic", "example.com", "--alpn", "h3,hq-29"]);
+        match &cli.command {
+            Command::Quic { alpn, .. } => assert_eq!(alpn, "h3,hq-29"),
+            other => panic!("expected Quic, got {:?}", std::mem::discriminant(other)),
+        }
+    }
+
+    #[test]
+    fn quic_subcommand_requires_endpoint() {
+        let result = Cli::try_parse_from(["knockknock", "quic"]);
+        assert!(result.is_err());
     }
 }

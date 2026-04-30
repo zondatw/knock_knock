@@ -21,8 +21,8 @@ use rmcp::{
 use serde::{Deserialize, Serialize};
 use zpinger::{
     DnsPinger, GrpcPinger, GrpcStreamPinger, HlsPinger, HttpMethod, HttpPinger, MqttPinger,
-    MqttVersion, NtpPinger, Pinger, RecordType, RtmpPinger, RtspPinger, StunPinger, TcpPinger,
-    TlsPinger, TurnPinger, UdpPinger, WebSocketPinger,
+    MqttVersion, NtpPinger, Pinger, QuicPinger, RecordType, RtmpPinger, RtspPinger, StunPinger,
+    TcpPinger, TlsPinger, TurnPinger, UdpPinger, WebSocketPinger,
 };
 
 const DEFAULT_COUNT: u64 = 1;
@@ -145,6 +145,21 @@ struct GrpcPingArgs {
     /// Defaults to empty (overall server health).
     #[serde(default)]
     service: Option<String>,
+    #[serde(default)]
+    count: Option<u64>,
+    #[serde(default)]
+    timeout_ms: Option<u64>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct QuicPingArgs {
+    /// QUIC endpoint, e.g. `quic://example.com:443`,
+    /// `https://example.com`, or schemeless `host:port`.
+    target: String,
+    /// ALPN protocol(s), comma-separated. Defaults to `h3`. Pass an
+    /// empty string to send no ALPN extension.
+    #[serde(default)]
+    alpn: Option<String>,
     #[serde(default)]
     count: Option<u64>,
     #[serde(default)]
@@ -462,6 +477,30 @@ impl KnockknockServer {
     ) -> Result<CallToolResult, McpError> {
         let count = count_or_default(args.count);
         let p = RtmpPinger::new(args.target).with_timeout(timeout_or_default(args.timeout_ms));
+        let report = run_pings(&p, count).await;
+        report_to_result(&report)
+    }
+
+    #[tool(
+        description = "QUIC ping — completes an RFC 9000 QUIC v1 handshake (UDP + TLS 1.3 + transport parameters + ALPN agreement) and reports the time taken. Default ALPN is `h3` (HTTP/3); pass `alpn` (comma-separated) to override. Default port 443. `target` accepts `quic://`, `https://`, or schemeless host:port."
+    )]
+    async fn quic_ping(
+        &self,
+        Parameters(args): Parameters<QuicPingArgs>,
+    ) -> Result<CallToolResult, McpError> {
+        let count = count_or_default(args.count);
+        let alpns: Vec<Vec<u8>> = match args.alpn.as_deref() {
+            Some(s) => s
+                .split(',')
+                .filter(|p| !p.is_empty())
+                .map(|p| p.as_bytes().to_vec())
+                .collect(),
+            None => vec![b"h3".to_vec()],
+        };
+        let mut p = QuicPinger::new(args.target).with_timeout(timeout_or_default(args.timeout_ms));
+        if !alpns.is_empty() {
+            p = p.with_alpn(alpns);
+        }
         let report = run_pings(&p, count).await;
         report_to_result(&report)
     }

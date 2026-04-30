@@ -67,6 +67,12 @@ struct Args {
     #[arg(long, default_value_t = 18012)]
     rtmp: u16,
 
+    /// QUIC server port — accepts an RFC 9000 v1 connection and
+    /// closes immediately; uses a self-signed cert (use 0 for
+    /// ephemeral)
+    #[arg(long, default_value_t = 18013)]
+    quic: u16,
+
     /// Bind address (default 0.0.0.0; use 127.0.0.1 for loopback only)
     #[arg(long, default_value = "0.0.0.0")]
     bind: String,
@@ -128,6 +134,9 @@ fn main() {
     let rtmp = start_or_die("rtmp", args.rtmp, || {
         testserver::start_rtmp_ok(format!("{bind}:{}", args.rtmp))
     });
+    let quic_server = start_or_die("quic", args.quic, || {
+        Ok(testserver::start_quic_ok(format!("{bind}:{}", args.quic))?.addr)
+    });
 
     println!("[tcp]  listening on {tcp}");
     println!("[udp]  listening on {udp}");
@@ -142,6 +151,7 @@ fn main() {
     println!("[turn] listening on {turn}");
     println!("[rtsp] listening on {rtsp}");
     println!("[rtmp] listening on {rtmp}");
+    println!("[quic] listening on {quic_server} (self-signed cert; pinger needs --tls override or skip-verify)");
     println!();
     println!("Try in another terminal:");
     println!("  knockknock tcp localhost:{}", tcp.port());
@@ -161,6 +171,13 @@ fn main() {
     println!("  knockknock turn localhost:{}", turn.port());
     println!("  knockknock rtsp rtsp://localhost:{}", rtsp.port());
     println!("  knockknock rtmp rtmp://localhost:{}", rtmp.port());
+    println!(
+        "  # quic uses a self-signed cert — pinger will hit a trust error against the public webpki roots."
+    );
+    println!(
+        "  # see the QUIC section of the README for the integration-test path that injects a custom ClientConfig."
+    );
+    println!("  knockknock quic localhost:{}", quic_server.port());
     println!();
     println!("Press Ctrl+C to stop.");
 

@@ -4,7 +4,8 @@ use std::io::Result;
 use std::time::Duration;
 use zpinger::{
     DnsPinger, GrpcPinger, GrpcStreamPinger, HlsPinger, HttpPinger, MqttPinger, MqttVersion,
-    NtpPinger, Pinger, StunPinger, TcpPinger, TlsPinger, TurnPinger, UdpPinger, WebSocketPinger,
+    NtpPinger, Pinger, RtmpPinger, RtspPinger, StunPinger, TcpPinger, TlsPinger, TurnPinger,
+    UdpPinger, WebSocketPinger,
 };
 
 #[derive(Parser)]
@@ -119,6 +120,20 @@ enum Command {
         /// TURN server, e.g. `turn.example.com:3478`.
         server: String,
     },
+    /// RTSP ping — sends an `OPTIONS` request (RFC 2326 §10.1) and
+    /// validates the `RTSP/1.0 200` response. `rtsp://` (TCP/554) and
+    /// `rtsps://` (TLS/322) both accepted.
+    Rtsp {
+        /// RTSP target, e.g. `rtsp://host:554/` or `rtsps://host`.
+        target: String,
+    },
+    /// RTMP ping — runs the simple Adobe RTMP §5.2.1 handshake
+    /// (C0+C1 → S0+S1+S2 → C2) and reports completion time.
+    /// `rtmp://` (TCP/1935) and `rtmps://` (TLS/443) both accepted.
+    Rtmp {
+        /// RTMP target, e.g. `rtmp://host:1935` or `rtmps://host`.
+        target: String,
+    },
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
@@ -211,6 +226,8 @@ fn target_of(command: &Command) -> &str {
         Command::Ntp { server } => server,
         Command::Stun { server } => server,
         Command::Turn { server } => server,
+        Command::Rtsp { target } => target,
+        Command::Rtmp { target } => target,
         Command::Http { method } => match method {
             HttpMethod::Connect { target }
             | HttpMethod::Get { target }
@@ -250,6 +267,8 @@ fn build_pinger(command: &Command) -> Box<dyn Pinger> {
         Command::Ntp { server } => Box::new(NtpPinger::new(server.clone())),
         Command::Stun { server } => Box::new(StunPinger::new(server.clone())),
         Command::Turn { server } => Box::new(TurnPinger::new(server.clone())),
+        Command::Rtsp { target } => Box::new(RtspPinger::new(target.clone())),
+        Command::Rtmp { target } => Box::new(RtmpPinger::new(target.clone())),
         Command::Mqtt {
             broker,
             client_id,
@@ -329,6 +348,19 @@ async fn main() -> Result<()> {
         Command::Ntp { server } => default_port_target(server, 123),
         Command::Stun { server } => default_port_target(server, 3478),
         Command::Turn { server } => default_port_target(server, 3478),
+        // RTSP / RTMP carry their own scheme. Pick the right default
+        // port for the "DNS lookup:" banner so it matches the
+        // address the pinger will actually dial.
+        Command::Rtsp { target } => {
+            let scheme = zpinger::uri::get_uri(target).scheme.to_ascii_lowercase();
+            let p = if scheme == "rtsps" { 322 } else { 554 };
+            default_port_target(target, p)
+        }
+        Command::Rtmp { target } => {
+            let scheme = zpinger::uri::get_uri(target).scheme.to_ascii_lowercase();
+            let p = if scheme == "rtmps" { 443 } else { 1935 };
+            default_port_target(target, p)
+        }
         _ => target.clone(),
     };
     let server = zpinger::resolve(&resolve_target).await;
@@ -711,6 +743,34 @@ mod tests {
     #[test]
     fn batch_a_subcommands_require_target() {
         for cmd in ["tls", "ntp", "stun", "turn"] {
+            let result = Cli::try_parse_from(["knockknock", cmd]);
+            assert!(result.is_err(), "{cmd} should require a target");
+        }
+    }
+
+    #[test]
+    fn parses_rtsp_subcommand() {
+        let cli = parse(&["knockknock", "rtsp", "rtsp://example.com:554/"]);
+        match &cli.command {
+            Command::Rtsp { target } => assert_eq!(target, "rtsp://example.com:554/"),
+            other => panic!("expected Rtsp, got {:?}", std::mem::discriminant(other)),
+        }
+    }
+
+    #[test]
+    fn parses_rtmp_subcommand() {
+        let cli = parse(&["knockknock", "rtmp", "rtmp://stream.example.com:1935/live"]);
+        match &cli.command {
+            Command::Rtmp { target } => {
+                assert_eq!(target, "rtmp://stream.example.com:1935/live")
+            }
+            other => panic!("expected Rtmp, got {:?}", std::mem::discriminant(other)),
+        }
+    }
+
+    #[test]
+    fn batch_b_subcommands_require_target() {
+        for cmd in ["rtsp", "rtmp"] {
             let result = Cli::try_parse_from(["knockknock", cmd]);
             assert!(result.is_err(), "{cmd} should require a target");
         }

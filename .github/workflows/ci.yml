@@ -69,6 +69,9 @@ jobs:
           - "stun"
           - "turn"
           - "ntp,stun,turn"       # all UDP infra pingers, no TLS
+          - "rtsp"
+          - "rtmp"
+          - "rtsp,rtmp"
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable

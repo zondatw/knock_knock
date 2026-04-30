@@ -21,8 +21,8 @@ use rmcp::{
 use serde::{Deserialize, Serialize};
 use zpinger::{
     DnsPinger, GrpcPinger, GrpcStreamPinger, HlsPinger, HttpMethod, HttpPinger, MqttPinger,
-    MqttVersion, NtpPinger, Pinger, RecordType, StunPinger, TcpPinger, TlsPinger, TurnPinger,
-    UdpPinger, WebSocketPinger,
+    MqttVersion, NtpPinger, Pinger, RecordType, RtmpPinger, RtspPinger, StunPinger, TcpPinger,
+    TlsPinger, TurnPinger, UdpPinger, WebSocketPinger,
 };
 
 const DEFAULT_COUNT: u64 = 1;
@@ -436,6 +436,32 @@ impl KnockknockServer {
     ) -> Result<CallToolResult, McpError> {
         let count = count_or_default(args.count);
         let p = TurnPinger::new(args.target).with_timeout(timeout_or_default(args.timeout_ms));
+        let report = run_pings(&p, count).await;
+        report_to_result(&report)
+    }
+
+    #[tool(
+        description = "RTSP ping — sends an `OPTIONS` request (RFC 2326 §10.1) and validates the `RTSP/1.0 200` response. `rtsp://` runs over TCP/554; `rtsps://` runs over TLS/322. OPTIONS is the spec-mandated keepalive — no media-session state required."
+    )]
+    async fn rtsp_ping(
+        &self,
+        Parameters(args): Parameters<TargetArgs>,
+    ) -> Result<CallToolResult, McpError> {
+        let count = count_or_default(args.count);
+        let p = RtspPinger::new(args.target).with_timeout(timeout_or_default(args.timeout_ms));
+        let report = run_pings(&p, count).await;
+        report_to_result(&report)
+    }
+
+    #[tool(
+        description = "RTMP ping — runs the simple Adobe RTMP §5.2.1 handshake (C0+C1 → S0+S1+S2 → C2) and reports completion time. Used for live-streaming ingest endpoints. `rtmp://` runs over TCP/1935; `rtmps://` runs over TLS/443."
+    )]
+    async fn rtmp_ping(
+        &self,
+        Parameters(args): Parameters<TargetArgs>,
+    ) -> Result<CallToolResult, McpError> {
+        let count = count_or_default(args.count);
+        let p = RtmpPinger::new(args.target).with_timeout(timeout_or_default(args.timeout_ms));
         let report = run_pings(&p, count).await;
         report_to_result(&report)
     }

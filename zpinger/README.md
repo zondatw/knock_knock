@@ -23,6 +23,8 @@ also usable directly from any Rust async application.
 | `NtpPinger`        | host or host:port (default port 123)                | NTP v4 client packet + server-mode response validation  |
 | `StunPinger`       | host or host:port (default port 3478)               | UDP Binding Request + Binding Success Response          |
 | `TurnPinger`       | host or host:port (default port 3478)               | UDP Allocate Request + expected `401 Unauthorized` reply |
+| `RtspPinger`       | `rtsp://`, `rtsps://`                               | TCP + RFC 2326 OPTIONS request + `RTSP/1.0 200` validation |
+| `RtmpPinger`       | `rtmp://`, `rtmps://`                               | TCP + Adobe RTMP §5.2.1 simple handshake (C0/C1/S0/S1/S2/C2) |
 
 TLS for `https://` / `wss://` / `mqtts://` / `grpcs://` is handled by
 [`rustls`](https://github.com/rustls/rustls) with the Mozilla root CA
@@ -73,6 +75,8 @@ zpinger = { version = "0.6", default-features = false, features = ["http"] }
 | `ntp`   | `NtpPinger`                          | nothing extra                          |
 | `stun`  | `StunPinger`                         | nothing extra                          |
 | `turn`  | `TurnPinger`                         | nothing extra (shares STUN's packet builder internally) |
+| `rtsp`  | `RtspPinger`                         | http TLS (shared) for `rtsps://`       |
+| `rtmp`  | `RtmpPinger`                         | http TLS (shared) for `rtmps://`       |
 | `all`   | all of the above                     | all of the above                       |
 
 The `Pinger` trait, `timed`, `resolve`, and the URI parser are
@@ -243,6 +247,39 @@ Request and considers the expected `401 Unauthorized` Allocate Error
 Response a successful liveness check (RFC 5766 §6.2 mandates that
 response). No relay state is allocated server-side, so it's safe to
 spam against shared TURN infrastructure.
+
+### RTSP
+
+```rust
+use zpinger::{Pinger, RtspPinger};
+
+// rtsp:// runs over TCP/554; OPTIONS is the spec-mandated keepalive
+RtspPinger::new("rtsp://camera.example.com:554/")
+    .ping()
+    .await?;
+
+// rtsps:// runs over TLS/322 (RFC 7826), reuses the rustls layer
+RtspPinger::new("rtsps://secure-camera.example.com/")
+    .ping()
+    .await?;
+```
+
+### RTMP
+
+```rust
+use zpinger::{Pinger, RtmpPinger};
+
+// rtmp:// runs over TCP/1935; just the Adobe §5.2.1 handshake, no
+// AMF connect afterwards — that's enough to validate ingest liveness.
+RtmpPinger::new("rtmp://ingest.example.com:1935/live")
+    .ping()
+    .await?;
+
+// rtmps:// runs over TLS/443
+RtmpPinger::new("rtmps://secure-ingest.example.com/live")
+    .ping()
+    .await?;
+```
 
 ## Heterogeneous dispatch via `Box<dyn Pinger>`
 

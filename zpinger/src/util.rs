@@ -16,6 +16,8 @@
     feature = "ntp",
     feature = "stun",
     feature = "turn",
+    feature = "rtsp",
+    feature = "rtmp",
 ))]
 use std::io::{self, Result};
 #[cfg(any(
@@ -30,6 +32,8 @@ use std::io::{self, Result};
     feature = "ntp",
     feature = "stun",
     feature = "turn",
+    feature = "rtsp",
+    feature = "rtmp",
 ))]
 use std::time::Duration;
 #[cfg(any(
@@ -44,6 +48,8 @@ use std::time::Duration;
     feature = "ntp",
     feature = "stun",
     feature = "turn",
+    feature = "rtsp",
+    feature = "rtmp",
 ))]
 use tokio::time::timeout;
 
@@ -63,6 +69,8 @@ use tokio::time::timeout;
     feature = "ntp",
     feature = "stun",
     feature = "turn",
+    feature = "rtsp",
+    feature = "rtmp",
 ))]
 pub(crate) async fn with_timeout<F>(d: Duration, fut: F) -> Result<()>
 where

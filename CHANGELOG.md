@@ -8,6 +8,22 @@ version of each published crate.
 ## [Unreleased]
 
 ### Added
+- **RTSP pinger** (`zpinger::RtspPinger`) — sends an `OPTIONS`
+  request (RFC 2326 §10.1) over TCP and validates the
+  `RTSP/1.0 200` response. `OPTIONS` is the spec-mandated keepalive
+  for RTSP; no media-session state required. `rtsp://` runs over
+  TCP/554, `rtsps://` (RFC 7826 §19) over TLS/322. CLI:
+  `knockknock rtsp <target>`. MCP: `rtsp_ping`. Feature: `rtsp`.
+- **RTMP pinger** (`zpinger::RtmpPinger`) — runs the simple Adobe
+  RTMP §5.2.1 handshake (C0+C1 → S0+S1+S2 → C2). Reports completion
+  time once the handshake finishes; doesn't go further into AMF
+  `connect` negotiation. Useful for live-streaming ingest
+  monitoring. `rtmp://` runs over TCP/1935, `rtmps://` over
+  TLS/443. CLI: `knockknock rtmp <target>`. MCP: `rtmp_ping`.
+  Feature: `rtmp`.
+- **testserver gains `start_rtsp_ok` / `start_rtmp_ok`** for the
+  integration tests above; the binary exposes them on default
+  ports 18011 / 18012.
 - **TLS handshake pinger** (`zpinger::TlsPinger`) — TCP connect +
   TLS handshake (ClientHello → ServerHello → Certificate →
   Finished), then close. Reports success when the handshake

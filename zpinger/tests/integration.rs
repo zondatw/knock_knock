@@ -715,3 +715,126 @@ async fn turn_pinger_usable_as_trait_object() {
     let p: Box<dyn Pinger> = Box::new(zpinger::TurnPinger::new(addr.to_string()));
     p.ping().await.unwrap();
 }
+
+// -- RTSP pinger ----------------------------------------------------------
+
+#[tokio::test]
+async fn rtsp_pinger_succeeds_against_options_responder() {
+    let addr = testserver::start_rtsp_ok("127.0.0.1:0").unwrap();
+    zpinger::RtspPinger::new(format!("rtsp://localhost:{}", addr.port()))
+        .ping()
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn rtsp_pinger_with_custom_timeout() {
+    let addr = testserver::start_rtsp_ok("127.0.0.1:0").unwrap();
+    zpinger::RtspPinger::new(format!("rtsp://localhost:{}", addr.port()))
+        .with_timeout(Duration::from_secs(1))
+        .ping()
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn rtsp_pinger_fails_on_closed_port() {
+    let target = format!("rtsp://{}", closed_tcp_addr());
+    let p = zpinger::RtspPinger::new(target).with_timeout(Duration::from_millis(500));
+    assert!(p.ping().await.is_err());
+}
+
+#[tokio::test]
+async fn rtsp_pinger_rejects_non_rtsp_scheme() {
+    let p = zpinger::RtspPinger::new("http://example.com/").with_timeout(Duration::from_secs(1));
+    let err = p.ping().await.unwrap_err();
+    assert!(err.to_string().contains("scheme 'http'"));
+}
+
+#[tokio::test]
+async fn rtsp_pinger_rejects_non_rtsp_response() {
+    // HTTP server on RTSP-style URL — response must be rejected.
+    let addr = testserver::start_http_ok("127.0.0.1:0").unwrap();
+    let p =
+        zpinger::RtspPinger::new(format!("rtsp://{}", addr)).with_timeout(Duration::from_secs(1));
+    let err = p
+        .ping()
+        .await
+        .expect_err("HTTP/1.1 response must not pass RTSP validation");
+    assert!(err.to_string().contains("RTSP/1.0 200"));
+}
+
+#[tokio::test]
+async fn rtsp_pinger_usable_as_trait_object() {
+    let addr = testserver::start_rtsp_ok("127.0.0.1:0").unwrap();
+    let p: Box<dyn Pinger> = Box::new(zpinger::RtspPinger::new(format!(
+        "rtsp://localhost:{}",
+        addr.port()
+    )));
+    p.ping().await.unwrap();
+}
+
+// -- RTMP pinger ----------------------------------------------------------
+
+#[tokio::test]
+async fn rtmp_pinger_succeeds_against_handshake_responder() {
+    let addr = testserver::start_rtmp_ok("127.0.0.1:0").unwrap();
+    zpinger::RtmpPinger::new(format!("rtmp://localhost:{}", addr.port()))
+        .ping()
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn rtmp_pinger_with_custom_timeout() {
+    let addr = testserver::start_rtmp_ok("127.0.0.1:0").unwrap();
+    zpinger::RtmpPinger::new(format!("rtmp://localhost:{}", addr.port()))
+        .with_timeout(Duration::from_secs(1))
+        .ping()
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn rtmp_pinger_fails_on_closed_port() {
+    let target = format!("rtmp://{}", closed_tcp_addr());
+    let p = zpinger::RtmpPinger::new(target).with_timeout(Duration::from_millis(500));
+    assert!(p.ping().await.is_err());
+}
+
+#[tokio::test]
+async fn rtmp_pinger_rejects_non_rtmp_scheme() {
+    let p = zpinger::RtmpPinger::new("ws://example.com/").with_timeout(Duration::from_secs(1));
+    let err = p.ping().await.unwrap_err();
+    assert!(err.to_string().contains("scheme 'ws'"));
+}
+
+#[tokio::test]
+async fn rtmp_pinger_fails_when_server_speaks_wrong_protocol() {
+    // HTTP server replies with `HTTP/1.1` text on the first 1537 bytes;
+    // S0 byte (first byte of "HTTP/...") is 'H' = 0x48, not 0x03.
+    let addr = testserver::start_http_ok("127.0.0.1:0").unwrap();
+    let p =
+        zpinger::RtmpPinger::new(format!("rtmp://{}", addr)).with_timeout(Duration::from_secs(1));
+    let err = p
+        .ping()
+        .await
+        .expect_err("HTTP server must not pass RTMP handshake");
+    let msg = err.to_string();
+    // Either S0 version mismatch or unexpected EOF — both are correct
+    // failure modes against an HTTP responder.
+    assert!(
+        msg.contains("S0 returned version") || msg.to_lowercase().contains("eof"),
+        "unexpected error: {msg}"
+    );
+}
+
+#[tokio::test]
+async fn rtmp_pinger_usable_as_trait_object() {
+    let addr = testserver::start_rtmp_ok("127.0.0.1:0").unwrap();
+    let p: Box<dyn Pinger> = Box::new(zpinger::RtmpPinger::new(format!(
+        "rtmp://localhost:{}",
+        addr.port()
+    )));
+    p.ping().await.unwrap();
+}

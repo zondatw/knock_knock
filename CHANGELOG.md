@@ -7,6 +7,8 @@ version of each published crate.
 
 ## [Unreleased]
 
+## [1.7.0] / zpinger 0.7.0 — 2026-04-30
+
 ### Added
 - **QUIC pinger** (`zpinger::QuicPinger`). Completes an RFC 9000
   QUIC v1 handshake (UDP + TLS 1.3 + transport parameters + ALPN

@@ -64,6 +64,11 @@ jobs:
           - "mqtt"                # _tls (shared)
           - "hls"                 # _tls (shared)
           - "grpc"                # tonic stack, separate from _tls
+          - "tls"                 # TLS handshake only — pulls _tls
+          - "ntp"
+          - "stun"
+          - "turn"
+          - "ntp,stun,turn"       # all UDP infra pingers, no TLS
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable

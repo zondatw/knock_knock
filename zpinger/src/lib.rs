@@ -61,6 +61,29 @@ mod hls;
 #[cfg(feature = "hls")]
 pub use crate::hls::HlsPinger;
 
+#[cfg(feature = "tls")]
+mod tls_handshake;
+#[cfg(feature = "tls")]
+pub use crate::tls_handshake::TlsPinger;
+
+#[cfg(feature = "ntp")]
+mod ntp;
+#[cfg(feature = "ntp")]
+pub use crate::ntp::NtpPinger;
+
+// STUN module is also a building block for TURN — gate it on either
+// `stun` or `turn` so TURN compiles even when the user only enables
+// the `turn` feature directly.
+#[cfg(any(feature = "stun", feature = "turn"))]
+mod stun;
+#[cfg(feature = "stun")]
+pub use crate::stun::StunPinger;
+
+#[cfg(feature = "turn")]
+mod turn;
+#[cfg(feature = "turn")]
+pub use crate::turn::TurnPinger;
+
 // `BUF_SIZE` is shared by `level4` (tcp / udp) and `http`.
 // `HTTP_UNCONNECT_STATUS_CODE` is http-only.
 #[cfg(any(feature = "tcp", feature = "udp", feature = "http"))]

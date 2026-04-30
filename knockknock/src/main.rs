@@ -4,7 +4,7 @@ use std::io::Result;
 use std::time::Duration;
 use zpinger::{
     DnsPinger, GrpcPinger, GrpcStreamPinger, HlsPinger, HttpPinger, MqttPinger, MqttVersion,
-    Pinger, TcpPinger, UdpPinger, WebSocketPinger,
+    NtpPinger, Pinger, StunPinger, TcpPinger, TlsPinger, TurnPinger, UdpPinger, WebSocketPinger,
 };
 
 #[derive(Parser)]
@@ -87,6 +87,37 @@ enum Command {
         /// Speak MQTT 5 instead of the default MQTT 3.1.1.
         #[arg(long)]
         v5: bool,
+    },
+    /// TLS handshake ping — TCP connect + TLS handshake (ClientHello
+    /// → ServerHello → Certificate → Finished), then close. Reports
+    /// success when the handshake completes; cert validation errors
+    /// surface as protocol errors. Default port 443.
+    Tls {
+        /// Target host:port or https:// URL, e.g.
+        /// `example.com:443` or `https://api.example.com`.
+        target: String,
+    },
+    /// NTP ping — sends one 48-byte NTP v4 client packet
+    /// (RFC 5905 §7.3) and validates the server response (mode +
+    /// version). Default port 123.
+    Ntp {
+        /// NTP server, e.g. `time.cloudflare.com` or
+        /// `pool.ntp.org:123`.
+        server: String,
+    },
+    /// STUN ping — sends one Binding Request (RFC 5389) and validates
+    /// the Binding Success Response. Default port 3478.
+    Stun {
+        /// STUN server, e.g. `stun.l.google.com:19302`.
+        server: String,
+    },
+    /// TURN ping — sends one unauthenticated Allocate Request
+    /// (RFC 5766) and treats the expected `401 Unauthorized` Allocate
+    /// Error Response as a successful liveness check. Default port
+    /// 3478. No actual relay state allocated, so it's safe to spam.
+    Turn {
+        /// TURN server, e.g. `turn.example.com:3478`.
+        server: String,
     },
 }
 
@@ -176,6 +207,10 @@ fn target_of(command: &Command) -> &str {
         Command::Mqtt { broker, .. } => broker,
         Command::Grpc { endpoint, .. } => endpoint,
         Command::Hls { url } => url,
+        Command::Tls { target } => target,
+        Command::Ntp { server } => server,
+        Command::Stun { server } => server,
+        Command::Turn { server } => server,
         Command::Http { method } => match method {
             HttpMethod::Connect { target }
             | HttpMethod::Get { target }
@@ -211,6 +246,10 @@ fn build_pinger(command: &Command) -> Box<dyn Pinger> {
             }
         }
         Command::Hls { url } => Box::new(HlsPinger::new(url.clone())),
+        Command::Tls { target } => Box::new(TlsPinger::new(target.clone())),
+        Command::Ntp { server } => Box::new(NtpPinger::new(server.clone())),
+        Command::Stun { server } => Box::new(StunPinger::new(server.clone())),
+        Command::Turn { server } => Box::new(TurnPinger::new(server.clone())),
         Command::Mqtt {
             broker,
             client_id,
@@ -273,6 +312,23 @@ async fn main() -> Result<()> {
                 endpoint.clone()
             }
         }
+        // TLS handshake speaks to port 443 by default (same as HTTPS).
+        // If the user passed a schemeless host, prepend `https://` so
+        // `resolve()` picks the right default port.
+        Command::Tls { target } => {
+            if target.contains("://") || target.contains(':') {
+                target.clone()
+            } else {
+                format!("https://{target}")
+            }
+        }
+        // NTP / STUN / TURN are UDP-only; resolve() defaults to port 80
+        // for schemeless inputs, which is wrong here. Patch the target
+        // so the "DNS lookup:" line shows the address the pinger will
+        // actually talk to.
+        Command::Ntp { server } => default_port_target(server, 123),
+        Command::Stun { server } => default_port_target(server, 3478),
+        Command::Turn { server } => default_port_target(server, 3478),
         _ => target.clone(),
     };
     let server = zpinger::resolve(&resolve_target).await;
@@ -614,5 +670,49 @@ mod tests {
     fn hls_subcommand_requires_url() {
         let result = Cli::try_parse_from(["knockknock", "hls"]);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn parses_tls_subcommand() {
+        let cli = parse(&["knockknock", "tls", "example.com:443"]);
+        match &cli.command {
+            Command::Tls { target } => assert_eq!(target, "example.com:443"),
+            other => panic!("expected Tls, got {:?}", std::mem::discriminant(other)),
+        }
+    }
+
+    #[test]
+    fn parses_ntp_subcommand() {
+        let cli = parse(&["knockknock", "ntp", "time.cloudflare.com"]);
+        match &cli.command {
+            Command::Ntp { server } => assert_eq!(server, "time.cloudflare.com"),
+            other => panic!("expected Ntp, got {:?}", std::mem::discriminant(other)),
+        }
+    }
+
+    #[test]
+    fn parses_stun_subcommand() {
+        let cli = parse(&["knockknock", "stun", "stun.l.google.com:19302"]);
+        match &cli.command {
+            Command::Stun { server } => assert_eq!(server, "stun.l.google.com:19302"),
+            other => panic!("expected Stun, got {:?}", std::mem::discriminant(other)),
+        }
+    }
+
+    #[test]
+    fn parses_turn_subcommand() {
+        let cli = parse(&["knockknock", "turn", "turn.example.com:3478"]);
+        match &cli.command {
+            Command::Turn { server } => assert_eq!(server, "turn.example.com:3478"),
+            other => panic!("expected Turn, got {:?}", std::mem::discriminant(other)),
+        }
+    }
+
+    #[test]
+    fn batch_a_subcommands_require_target() {
+        for cmd in ["tls", "ntp", "stun", "turn"] {
+            let result = Cli::try_parse_from(["knockknock", cmd]);
+            assert!(result.is_err(), "{cmd} should require a target");
+        }
     }
 }

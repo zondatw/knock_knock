@@ -2,7 +2,7 @@
 name = "zpinger"
 version = "0.6.0"
 authors = ["Zonda Yang <u226699@gmail.com>"]
-description = "Async, protocol-agnostic latency probe library: TCP / UDP / HTTP(S) / WebSocket / DNS / MQTT / gRPC / HLS"
+description = "Async, protocol-agnostic latency probe library: TCP / UDP / HTTP(S) / WebSocket / DNS / MQTT / gRPC / HLS / TLS / NTP / STUN / TURN"
 homepage = "https://github.com/zondatw/knock_knock"
 repository = "https://github.com/zondatw/knock_knock"
 edition = "2021"
@@ -16,13 +16,21 @@ categories = ["network-programming", "asynchronous"]
 # same library when they upgrade. Opt out with
 # `default-features = false` and pick only what you need.
 default = ["all"]
-all = ["tcp", "udp", "dns", "http", "ws", "mqtt", "grpc", "hls"]
+all = ["tcp", "udp", "dns", "http", "ws", "mqtt", "grpc", "hls", "tls", "ntp", "stun", "turn"]
 
-# Per-protocol features. `tcp` / `udp` / `dns` add no extra
-# dependencies beyond the always-on tokio + async-trait core.
+# Per-protocol features. `tcp` / `udp` / `dns` / `ntp` / `stun` /
+# `turn` add no extra dependencies beyond the always-on tokio +
+# async-trait core (the last three just hand-roll their own UDP
+# packet shapes).
 tcp = []
 udp = []
 dns = []
+ntp = []
+stun = []
+# `turn` shares STUN's packet builder but doesn't re-export
+# `StunPinger`. Pick `turn` alone if you only want TURN; pick both if
+# you want both pingers exposed.
+turn = []
 
 # TLS-using protocols share the rustls + tokio-rustls + webpki-roots
 # stack via the internal `_tls` aggregator. Don't enable `_tls`
@@ -31,6 +39,7 @@ http = ["_tls"]
 ws = ["_tls", "dep:tokio-tungstenite", "dep:futures-util"]
 mqtt = ["_tls"]
 hls = ["_tls"]
+tls = ["_tls"]
 
 # gRPC has its own TLS stack via tonic; doesn't pull `_tls`.
 grpc = ["dep:tonic", "dep:tonic-health"]

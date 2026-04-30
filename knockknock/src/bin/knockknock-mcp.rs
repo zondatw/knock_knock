@@ -21,7 +21,8 @@ use rmcp::{
 use serde::{Deserialize, Serialize};
 use zpinger::{
     DnsPinger, GrpcPinger, GrpcStreamPinger, HlsPinger, HttpMethod, HttpPinger, MqttPinger,
-    MqttVersion, Pinger, RecordType, TcpPinger, UdpPinger, WebSocketPinger,
+    MqttVersion, NtpPinger, Pinger, RecordType, StunPinger, TcpPinger, TlsPinger, TurnPinger,
+    UdpPinger, WebSocketPinger,
 };
 
 const DEFAULT_COUNT: u64 = 1;
@@ -383,6 +384,58 @@ impl KnockknockServer {
     ) -> Result<CallToolResult, McpError> {
         let count = count_or_default(args.count);
         let p = HlsPinger::new(args.url).with_timeout(timeout_or_default(args.timeout_ms));
+        let report = run_pings(&p, count).await;
+        report_to_result(&report)
+    }
+
+    #[tool(
+        description = "TLS handshake ping — TCP connect + TLS handshake (ClientHello → ServerHello → Certificate → Finished). Measures pure handshake latency including cert validation. Default port 443. target accepts host:port or https:// URL."
+    )]
+    async fn tls_ping(
+        &self,
+        Parameters(args): Parameters<TargetArgs>,
+    ) -> Result<CallToolResult, McpError> {
+        let count = count_or_default(args.count);
+        let p = TlsPinger::new(args.target).with_timeout(timeout_or_default(args.timeout_ms));
+        let report = run_pings(&p, count).await;
+        report_to_result(&report)
+    }
+
+    #[tool(
+        description = "NTP ping — sends one 48-byte NTP v4 client packet (RFC 5905) and validates the server reply (mode + version). Default port 123. target is the time server, e.g. `pool.ntp.org` or `time.cloudflare.com:123`."
+    )]
+    async fn ntp_ping(
+        &self,
+        Parameters(args): Parameters<TargetArgs>,
+    ) -> Result<CallToolResult, McpError> {
+        let count = count_or_default(args.count);
+        let p = NtpPinger::new(args.target).with_timeout(timeout_or_default(args.timeout_ms));
+        let report = run_pings(&p, count).await;
+        report_to_result(&report)
+    }
+
+    #[tool(
+        description = "STUN ping — sends one Binding Request (RFC 5389) and validates the Binding Success Response. Default port 3478. target is the STUN server, e.g. `stun.l.google.com:19302`."
+    )]
+    async fn stun_ping(
+        &self,
+        Parameters(args): Parameters<TargetArgs>,
+    ) -> Result<CallToolResult, McpError> {
+        let count = count_or_default(args.count);
+        let p = StunPinger::new(args.target).with_timeout(timeout_or_default(args.timeout_ms));
+        let report = run_pings(&p, count).await;
+        report_to_result(&report)
+    }
+
+    #[tool(
+        description = "TURN ping — sends one unauthenticated Allocate Request (RFC 5766) and treats the expected `401 Unauthorized` Allocate Error Response as a successful liveness check (server is alive and speaks TURN). No relay state allocated, no credentials needed. Default port 3478."
+    )]
+    async fn turn_ping(
+        &self,
+        Parameters(args): Parameters<TargetArgs>,
+    ) -> Result<CallToolResult, McpError> {
+        let count = count_or_default(args.count);
+        let p = TurnPinger::new(args.target).with_timeout(timeout_or_default(args.timeout_ms));
         let report = run_pings(&p, count).await;
         report_to_result(&report)
     }

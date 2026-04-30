@@ -12,6 +12,10 @@
     feature = "ws",
     feature = "mqtt",
     feature = "hls",
+    feature = "tls",
+    feature = "ntp",
+    feature = "stun",
+    feature = "turn",
 ))]
 use std::io::{self, Result};
 #[cfg(any(
@@ -22,6 +26,10 @@ use std::io::{self, Result};
     feature = "ws",
     feature = "mqtt",
     feature = "hls",
+    feature = "tls",
+    feature = "ntp",
+    feature = "stun",
+    feature = "turn",
 ))]
 use std::time::Duration;
 #[cfg(any(
@@ -32,6 +40,10 @@ use std::time::Duration;
     feature = "ws",
     feature = "mqtt",
     feature = "hls",
+    feature = "tls",
+    feature = "ntp",
+    feature = "stun",
+    feature = "turn",
 ))]
 use tokio::time::timeout;
 
@@ -47,6 +59,10 @@ use tokio::time::timeout;
     feature = "ws",
     feature = "mqtt",
     feature = "hls",
+    feature = "tls",
+    feature = "ntp",
+    feature = "stun",
+    feature = "turn",
 ))]
 pub(crate) async fn with_timeout<F>(d: Duration, fut: F) -> Result<()>
 where

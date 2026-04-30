@@ -526,3 +526,111 @@ pub fn start_mqtts_ok<A: ToSocketAddrs>(addr: A) -> Result<HttpsServer> {
         client_config,
     })
 }
+
+/// Spin up a minimal NTP server on `addr`. Replies to any 48-byte
+/// client-mode (Mode=3) packet with a server-mode (Mode=4) reply,
+/// echoing the version bits the client sent so the response passes
+/// `NtpPinger`'s validation. Doesn't fill in any timestamps; the pinger
+/// doesn't decode them.
+pub fn start_ntp_ok<A: ToSocketAddrs>(addr: A) -> Result<SocketAddr> {
+    let socket = UdpSocket::bind(addr)?;
+    let bound = socket.local_addr()?;
+    thread::spawn(move || {
+        let mut buf = [0u8; BUF_SIZE];
+        loop {
+            match socket.recv_from(&mut buf) {
+                Ok((48, src)) => {
+                    let version = (buf[0] >> 3) & 0x07;
+                    // LI=0 | VN=client_version | Mode=4 (server)
+                    buf[0] = (version << 3) | 4;
+                    // Stratum=2 just so the byte isn't suspicious; the
+                    // pinger doesn't check it.
+                    buf[1] = 2;
+                    let _ = socket.send_to(&buf[..48], src);
+                }
+                Ok(_) => {}
+                Err(_) => break,
+            }
+        }
+    });
+    Ok(bound)
+}
+
+/// Spin up a minimal STUN server on `addr`. Replies to any 20-byte (or
+/// longer) Binding Request (Message Type 0x0001) with a Binding Success
+/// Response (0x0101), echoing the client's Magic Cookie and Transaction
+/// ID. Doesn't add a XOR-MAPPED-ADDRESS attribute — `StunPinger` only
+/// validates the header, not body content.
+pub fn start_stun_ok<A: ToSocketAddrs>(addr: A) -> Result<SocketAddr> {
+    let socket = UdpSocket::bind(addr)?;
+    let bound = socket.local_addr()?;
+    thread::spawn(move || {
+        let mut buf = [0u8; BUF_SIZE];
+        loop {
+            match socket.recv_from(&mut buf) {
+                Ok((n, src)) if n >= 20 => {
+                    // Flip Binding Request (0x0001) → Binding Success
+                    // (0x0101). Magic cookie + TXID at bytes 4..20 stay
+                    // exactly as received, which is what the pinger
+                    // checks.
+                    buf[0] = 0x01;
+                    buf[1] = 0x01;
+                    // Message Length = 0 (no attributes).
+                    buf[2] = 0x00;
+                    buf[3] = 0x00;
+                    let _ = socket.send_to(&buf[..20], src);
+                }
+                Ok(_) => {}
+                Err(_) => break,
+            }
+        }
+    });
+    Ok(bound)
+}
+
+/// Spin up a minimal TURN server on `addr`. Replies to any 20-byte (or
+/// longer) Allocate Request (Message Type 0x0003) with a 401 Allocate
+/// Error Response (0x0113) carrying an ERROR-CODE attribute set to
+/// 401. That's exactly the unauthenticated-Allocate path RFC 5766
+/// mandates; `TurnPinger` treats receiving a well-formed 401 as a
+/// successful liveness check (no actual relay state allocated, no
+/// credentials needed).
+pub fn start_turn_ok<A: ToSocketAddrs>(addr: A) -> Result<SocketAddr> {
+    let socket = UdpSocket::bind(addr)?;
+    let bound = socket.local_addr()?;
+    thread::spawn(move || {
+        let mut buf = [0u8; BUF_SIZE];
+        loop {
+            match socket.recv_from(&mut buf) {
+                Ok((n, src)) if n >= 20 => {
+                    // Build Allocate Error Response: 20-byte header +
+                    // 8-byte ERROR-CODE attribute (type 0x0009, len 4,
+                    // class=4 number=1 → 401 Unauthorized).
+                    let mut resp = [0u8; 28];
+                    // Message Type = 0x0113
+                    resp[0] = 0x01;
+                    resp[1] = 0x13;
+                    // Message Length = 8 (one ERROR-CODE attribute).
+                    resp[2] = 0x00;
+                    resp[3] = 0x08;
+                    // Magic cookie + TXID copied from request.
+                    resp[4..20].copy_from_slice(&buf[4..20]);
+                    // ERROR-CODE attribute: type 0x0009, length 4.
+                    resp[20] = 0x00;
+                    resp[21] = 0x09;
+                    resp[22] = 0x00;
+                    resp[23] = 0x04;
+                    // Reserved (2 bytes), then class=4, number=1.
+                    resp[24] = 0x00;
+                    resp[25] = 0x00;
+                    resp[26] = 0x04;
+                    resp[27] = 0x01;
+                    let _ = socket.send_to(&resp, src);
+                }
+                Ok(_) => {}
+                Err(_) => break,
+            }
+        }
+    });
+    Ok(bound)
+}

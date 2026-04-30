@@ -19,6 +19,10 @@ also usable directly from any Rust async application.
 | `DnsPinger`        | host or host:port (default port 53)                | UDP query + response validation (ID / QR / RCODE / question echo) |
 | `MqttPinger`       | `mqtt://`, `mqtts://` (3.1.1 default; v5 opt-in)   | CONNECT/CONNACK + PINGREQ/PINGRESP + DISCONNECT         |
 | `GrpcPinger`       | `grpc://` / `http://` plaintext, `grpcs://` / `https://` TLS | `grpc.health.v1.Health/Check` unary RPC          |
+| `TlsPinger`        | `host[:port]` or `https://` (default port 443)      | TCP connect + TLS handshake (no application data)       |
+| `NtpPinger`        | host or host:port (default port 123)                | NTP v4 client packet + server-mode response validation  |
+| `StunPinger`       | host or host:port (default port 3478)               | UDP Binding Request + Binding Success Response          |
+| `TurnPinger`       | host or host:port (default port 3478)               | UDP Allocate Request + expected `401 Unauthorized` reply |
 
 TLS for `https://` / `wss://` / `mqtts://` / `grpcs://` is handled by
 [`rustls`](https://github.com/rustls/rustls) with the Mozilla root CA
@@ -65,6 +69,10 @@ zpinger = { version = "0.6", default-features = false, features = ["http"] }
 | `mqtt`  | `MqttPinger`, `MqttVersion`          | http TLS (shared)                      |
 | `hls`   | `HlsPinger`                          | http TLS (shared)                      |
 | `grpc`  | `GrpcPinger`, `GrpcStreamPinger`     | tonic + tonic-health + (tonic's own TLS stack) |
+| `tls`   | `TlsPinger`                          | http TLS (shared)                      |
+| `ntp`   | `NtpPinger`                          | nothing extra                          |
+| `stun`  | `StunPinger`                         | nothing extra                          |
+| `turn`  | `TurnPinger`                         | nothing extra (shares STUN's packet builder internally) |
 | `all`   | all of the above                     | all of the above                       |
 
 The `Pinger` trait, `timed`, `resolve`, and the URI parser are
@@ -203,6 +211,38 @@ GrpcPinger::new("grpcs://api.example.com:443")
     .ping()
     .await?;
 ```
+
+### TLS handshake only
+
+For monitoring just the TLS handshake (cert validation + ServerHello
++ Finished) without conflating HTTP response time:
+
+```rust
+use zpinger::{Pinger, TlsPinger};
+
+TlsPinger::new("api.example.com:443")
+    .ping()
+    .await?;
+```
+
+### NTP / STUN / TURN
+
+UDP infra pingers — all share the same shape (host or host:port,
+default to the protocol's well-known port):
+
+```rust
+use zpinger::{NtpPinger, Pinger, StunPinger, TurnPinger};
+
+NtpPinger::new("time.cloudflare.com").ping().await?;        // port 123
+StunPinger::new("stun.l.google.com:19302").ping().await?;   // port 3478
+TurnPinger::new("turn.example.com").ping().await?;          // port 3478
+```
+
+`TurnPinger` is the unusual one: it sends an unauthenticated Allocate
+Request and considers the expected `401 Unauthorized` Allocate Error
+Response a successful liveness check (RFC 5766 §6.2 mandates that
+response). No relay state is allocated server-side, so it's safe to
+spam against shared TURN infrastructure.
 
 ## Heterogeneous dispatch via `Box<dyn Pinger>`
 

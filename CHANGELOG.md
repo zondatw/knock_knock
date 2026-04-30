@@ -8,6 +8,24 @@ version of each published crate.
 ## [Unreleased]
 
 ### Added
+- **QUIC pinger** (`zpinger::QuicPinger`). Completes an RFC 9000
+  QUIC v1 handshake (UDP + TLS 1.3 + transport parameters + ALPN
+  agreement) and reports the time taken. Reports success once the
+  handshake finishes; doesn't open HTTP/3 streams on top — the
+  point is to isolate the connection-establishment cost the way
+  `TlsPinger` does for TCP+TLS, but for the QUIC stack. Default
+  ALPN is `h3`; override via `with_alpn`. Built on
+  [`quinn`](https://crates.io/crates/quinn) with the
+  `runtime-tokio` + `rustls-ring` features so QUIC's TLS layer
+  shares the ring crypto provider with the rest of the workspace.
+  Schemes accepted: `quic://`, `https://`, or `host:port`. Default
+  port 443. CLI: `knockknock quic <endpoint> [--alpn=h3,...]`.
+  MCP: `quic_ping`. Feature: `quic`.
+- **testserver gains `start_quic_ok`** for the integration tests
+  above, plus a `--quic <port>` flag on the binary (default 18013)
+  serving a self-signed `localhost` cert with ALPN `h3`. Pings
+  against this fixture succeed via `with_tls_config` injection;
+  see the integration suite for the canonical wiring.
 - **RTSP pinger** (`zpinger::RtspPinger`) — sends an `OPTIONS`
   request (RFC 2326 §10.1) over TCP and validates the
   `RTSP/1.0 200` response. `OPTIONS` is the spec-mandated keepalive

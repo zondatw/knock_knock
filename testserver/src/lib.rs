@@ -721,3 +721,116 @@ pub fn start_rtmp_ok<A: ToSocketAddrs>(addr: A) -> Result<SocketAddr> {
     });
     Ok(bound)
 }
+
+/// Handle returned by `start_quic_ok` — bound UDP address plus a
+/// `ClientConfig` whose only trust anchor is the freshly minted
+/// self-signed cert this server uses, so test code can speak QUIC
+/// to the server without pulling in webpki-roots.
+pub struct QuicServer {
+    pub addr: SocketAddr,
+    pub client_config: Arc<ClientConfig>,
+}
+
+/// Spin up a minimal QUIC server on `addr`. Uses a freshly generated
+/// self-signed cert for SAN `localhost` and accepts any incoming
+/// connection, completing the handshake and immediately closing —
+/// that's enough for `QuicPinger` (whose ping is "did the handshake
+/// finish?"). ALPN is `h3`.
+///
+/// Returns the bound `SocketAddr` plus a `ClientConfig` whose only
+/// trust anchor is this server's cert; callers feed it into
+/// `QuicPinger::with_tls_config`.
+///
+/// Internally the QUIC server runs on its own current-thread tokio
+/// runtime in a dedicated OS thread — keeps the binding API
+/// synchronous like the rest of `testserver`.
+pub fn start_quic_ok<A: ToSocketAddrs>(addr: A) -> Result<QuicServer> {
+    let bind: SocketAddr = addr
+        .to_socket_addrs()?
+        .next()
+        .ok_or_else(|| std::io::Error::other("start_quic_ok: no addresses to bind"))?;
+
+    let issued = rcgen::generate_simple_self_signed(vec!["localhost".to_string()])
+        .map_err(|e| std::io::Error::other(format!("rcgen: {e}")))?;
+    let cert_der = rustls::pki_types::CertificateDer::from(issued.cert.der().to_vec()).into_owned();
+    let key_der = rustls::pki_types::PrivateKeyDer::Pkcs8(
+        rustls::pki_types::PrivatePkcs8KeyDer::from(issued.key_pair.serialize_der()),
+    );
+
+    let provider = Arc::new(rustls::crypto::ring::default_provider());
+
+    let mut server_crypto = rustls::ServerConfig::builder_with_provider(provider.clone())
+        .with_protocol_versions(&[&rustls::version::TLS13])
+        .map_err(|e| std::io::Error::other(format!("rustls protocol (server): {e}")))?
+        .with_no_client_auth()
+        .with_single_cert(vec![cert_der.clone()], key_der)
+        .map_err(|e| std::io::Error::other(format!("rustls server cert: {e}")))?;
+    server_crypto.alpn_protocols = vec![b"h3".to_vec()];
+
+    let quic_server_crypto = quinn::crypto::rustls::QuicServerConfig::try_from(server_crypto)
+        .map_err(|e| std::io::Error::other(format!("quinn QuicServerConfig: {e}")))?;
+    let server_config = quinn::ServerConfig::with_crypto(Arc::new(quic_server_crypto));
+
+    // Build the matching client config for the test caller.
+    let mut client_roots = RootCertStore::empty();
+    client_roots
+        .add(cert_der)
+        .map_err(|e| std::io::Error::other(format!("trust anchor: {e}")))?;
+    let client_config = ClientConfig::builder_with_provider(provider)
+        .with_protocol_versions(&[&rustls::version::TLS13])
+        .map_err(|e| std::io::Error::other(format!("rustls protocol (client): {e}")))?
+        .with_root_certificates(client_roots)
+        .with_no_client_auth();
+    let client_config = Arc::new(client_config);
+
+    // Spin up the QUIC server in a dedicated thread + tokio
+    // current-thread runtime. We use a oneshot channel so we can
+    // surface the bound addr (in case the caller asked for port 0)
+    // before returning.
+    let (tx, rx) = std::sync::mpsc::channel::<Result<SocketAddr>>();
+    thread::spawn(move || {
+        let rt = match tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+        {
+            Ok(rt) => rt,
+            Err(e) => {
+                let _ = tx.send(Err(e));
+                return;
+            }
+        };
+        rt.block_on(async move {
+            let endpoint = match quinn::Endpoint::server(server_config, bind) {
+                Ok(ep) => ep,
+                Err(e) => {
+                    let _ = tx.send(Err(e));
+                    return;
+                }
+            };
+            let bound = match endpoint.local_addr() {
+                Ok(a) => a,
+                Err(e) => {
+                    let _ = tx.send(Err(e));
+                    return;
+                }
+            };
+            let _ = tx.send(Ok(bound));
+            while let Some(incoming) = endpoint.accept().await {
+                tokio::spawn(async move {
+                    if let Ok(connection) = incoming.await {
+                        // Handshake complete — close immediately so
+                        // the pinger sees a clean ping. We don't open
+                        // any HTTP/3 streams.
+                        connection.close(0u32.into(), b"hello-and-goodbye");
+                    }
+                });
+            }
+        });
+    });
+
+    let bound = rx.recv().map_err(std::io::Error::other)??;
+    Ok(QuicServer {
+        addr: bound,
+        client_config,
+    })
+}

@@ -26,3 +26,4 @@ tokio-stream = { version = "0.1", default-features = false, features = ["net"] }
 tonic = { version = "0.12", default-features = false, features = ["server", "tls"] }
 tonic-health = { version = "0.12", default-features = false }
 tungstenite = { version = "0.24", default-features = false, features = ["handshake"] }
+quinn = { version = "0.11", default-features = false, features = ["runtime-tokio", "rustls-ring"] }

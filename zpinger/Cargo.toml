@@ -2,7 +2,7 @@
 name = "zpinger"
 version = "0.6.0"
 authors = ["Zonda Yang <u226699@gmail.com>"]
-description = "Async, protocol-agnostic latency probe library: TCP / UDP / HTTP(S) / WebSocket / DNS / MQTT / gRPC / HLS / TLS / NTP / STUN / TURN / RTSP / RTMP"
+description = "Async, protocol-agnostic latency probe library: TCP / UDP / HTTP(S) / WebSocket / DNS / MQTT / gRPC / HLS / TLS / NTP / STUN / TURN / RTSP / RTMP / QUIC"
 homepage = "https://github.com/zondatw/knock_knock"
 repository = "https://github.com/zondatw/knock_knock"
 edition = "2021"
@@ -16,7 +16,7 @@ categories = ["network-programming", "asynchronous"]
 # same library when they upgrade. Opt out with
 # `default-features = false` and pick only what you need.
 default = ["all"]
-all = ["tcp", "udp", "dns", "http", "ws", "mqtt", "grpc", "hls", "tls", "ntp", "stun", "turn", "rtsp", "rtmp"]
+all = ["tcp", "udp", "dns", "http", "ws", "mqtt", "grpc", "hls", "tls", "ntp", "stun", "turn", "rtsp", "rtmp", "quic"]
 
 # Per-protocol features. `tcp` / `udp` / `dns` / `ntp` / `stun` /
 # `turn` add no extra dependencies beyond the always-on tokio +
@@ -46,6 +46,18 @@ rtmp = ["_tls"]
 # gRPC has its own TLS stack via tonic; doesn't pull `_tls`.
 grpc = ["dep:tonic", "dep:tonic-health"]
 
+# QUIC pulls quinn (which brings its own rustls integration via the
+# `rustls-ring` feature, sharing the ring crypto provider with `_tls`).
+# We pull rustls / rustls-pki-types / webpki-roots directly (not via
+# `_tls`) because quinn's rustls integration needs raw ClientConfig
+# access — going through tokio-rustls's Connector wouldn't help here.
+quic = [
+    "dep:quinn",
+    "dep:rustls",
+    "dep:rustls-pki-types",
+    "dep:webpki-roots",
+]
+
 _tls = [
     "dep:rustls",
     "dep:tokio-rustls",
@@ -68,6 +80,7 @@ tokio-tungstenite = { version = "0.24", optional = true, default-features = fals
 tonic = { version = "0.12", optional = true, default-features = false, features = ["channel", "tls", "tls-webpki-roots"] }
 tonic-health = { version = "0.12", optional = true, default-features = false }
 webpki-roots = { version = "0.26", optional = true }
+quinn = { version = "0.11", optional = true, default-features = false, features = ["runtime-tokio", "rustls-ring"] }
 
 [dev-dependencies]
 testserver = { path = "../testserver" }

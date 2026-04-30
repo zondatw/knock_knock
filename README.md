@@ -114,6 +114,9 @@ $ cargo run -p testserver
 [mqtt] listening on 0.0.0.0:18005
 [grpc] listening on 0.0.0.0:18006
 [hls]  listening on 0.0.0.0:18007
+[ntp]  listening on 0.0.0.0:18008
+[stun] listening on 0.0.0.0:18009
+[turn] listening on 0.0.0.0:18010
 
 Try in another terminal:
   knockknock tcp localhost:18000
@@ -125,14 +128,23 @@ Try in another terminal:
   knockknock grpc grpc://localhost:18006
   knockknock grpc grpc://localhost:18006 --watch
   knockknock hls http://localhost:18007/playlist.m3u8
+  knockknock ntp localhost:18008
+  knockknock stun localhost:18009
+  knockknock turn localhost:18010
 ```
 
 If the default ports are taken, override them (use `0` for an OS-picked
 ephemeral port, or pass any specific number):
 
 ```shell
-$ cargo run -p testserver -- --tcp 0 --udp 0 --http 0 --ws 0 --dns 0 --mqtt 0 --grpc 0 --hls 0 --bind 127.0.0.1
+$ cargo run -p testserver -- --tcp 0 --udp 0 --http 0 --ws 0 --dns 0 --mqtt 0 --grpc 0 --hls 0 --ntp 0 --stun 0 --turn 0 --bind 127.0.0.1
 ```
+
+`testserver` doesn't expose a TLS handshake fixture (the `tls` pinger
+is the rare protocol where pointing at a real public endpoint is the
+straightforward path — see the [TLS](#tls) section below). For
+end-to-end TURN testing against production-grade software see
+[TURN](#turn).
 
 ## Execution
 
@@ -158,6 +170,19 @@ Commands:
   hls   HLS ping — fetches the M3U8 (following a variant if the URL
         is a master playlist), then time-to-first-byte of the first
         segment via a Range: bytes=0-0 request.
+  tls   TLS handshake ping — TCP connect + TLS handshake (no
+        application data). Default port 443. Reuses rustls +
+        webpki-roots; cert validation errors surface as protocol
+        errors.
+  ntp   NTP ping — sends one 48-byte NTP v4 client packet
+        (RFC 5905 §7.3) and validates the server reply. Default
+        port 123.
+  stun  STUN ping — sends one Binding Request (RFC 5389) and
+        validates the Binding Success Response. Default port 3478.
+  turn  TURN ping — sends one unauthenticated Allocate Request
+        (RFC 5766) and treats the expected `401 Unauthorized` reply
+        as a successful liveness check. No relay state allocated,
+        no credentials needed. Default port 3478.
 
 Options:
   -c, --count <COUNT>  ping times [default: 3]
@@ -457,6 +482,152 @@ Connect time: 3, recv time: 3 (100%), lose time: 0 (0%)
 ```shell
 $ knockknock hls https://example.com/stream/master.m3u8
 ```
+
+### TLS
+
+Measures pure TLS handshake time (TCP connect + ClientHello +
+ServerHello + Certificate + Finished) without conflating any HTTP /
+WebSocket / MQTT / gRPC payload time on top. Useful for cert /
+handshake monitoring on load balancers and CDN edges.
+
+`testserver` doesn't expose a TLS fixture — the simplest test path
+is pointing at a real public endpoint:
+
+```shell
+$ knockknock tls api.github.com:443 -c 3
+DNS lookup: [20.27.177.116:443]
+api.github.com:443: time=  78.78871 ms
+api.github.com:443: time=  80.84967 ms
+api.github.com:443: time=  79.88504 ms
+----- statistic -----
+total time: 239.523416ms
+Connect time: 3, recv time: 3 (100%), lose time: 0 (0%)
+```
+
+Schemeless host gets port 443 by default; `https://host[:port]` URLs
+also work (the URI parser recognises the scheme).
+
+```shell
+$ knockknock tls cloudflare.com -c 3
+$ knockknock tls https://www.google.com -c 3
+```
+
+### NTP
+
+Sends one 48-byte NTP v4 client-mode packet and validates the server
+reply (mode field is server-mode, version echoes the client's). This
+is a "is the time server alive" probe, not a clock-discipline tool —
+timestamps in the reply aren't decoded.
+
+#### Local fixture (testserver)
+
+```shell
+$ knockknock ntp localhost:18008 -c 3
+DNS lookup: [[::1]:18008, 127.0.0.1:18008]
+localhost:18008: time=   0.41850 ms
+localhost:18008: time=   0.36462 ms
+localhost:18008: time=   0.34117 ms
+----- statistic -----
+total time: 1.124292ms
+Connect time: 3, recv time: 3 (100%), lose time: 0 (0%)
+```
+
+#### Real public time servers
+
+```shell
+$ knockknock ntp time.cloudflare.com -c 3
+DNS lookup: [162.159.200.123:123, 162.159.200.1:123]
+time.cloudflare.com: time=   7.83196 ms
+time.cloudflare.com: time=   7.80158 ms
+time.cloudflare.com: time=   8.47542 ms
+```
+
+`pool.ntp.org`, `time.google.com`, `time.apple.com`, etc. all work the
+same way. Default port 123, override with explicit `host:port` if
+needed.
+
+### STUN
+
+Sends one Binding Request (RFC 5389 §6) and validates the Binding
+Success Response (message type 0x0101, magic cookie unchanged,
+transaction ID echoed). Useful for monitoring NAT-traversal infra
+serving WebRTC clients.
+
+#### Local fixture (testserver)
+
+```shell
+$ knockknock stun localhost:18009 -c 3
+DNS lookup: [[::1]:18009, 127.0.0.1:18009]
+localhost:18009: time=   0.39800 ms
+localhost:18009: time=   0.32088 ms
+localhost:18009: time=   0.30217 ms
+```
+
+#### Real public STUN servers
+
+```shell
+$ knockknock stun stun.l.google.com:19302 -c 3
+DNS lookup: [74.125.250.129:19302]
+stun.l.google.com:19302: time=  11.44071 ms
+stun.l.google.com:19302: time=   9.64979 ms
+stun.l.google.com:19302: time=  10.26796 ms
+
+$ knockknock stun stun.cloudflare.com:3478 -c 3
+```
+
+Default port is 3478. Google's public STUN runs on 19302 and is the
+canonical sanity-check endpoint.
+
+### TURN
+
+Sends one **unauthenticated** Allocate Request (RFC 5766 §6.1) and
+treats the expected `401 Unauthorized` Allocate Error Response as a
+successful liveness check — that 401 IS the success signal, the spec
+mandates it. **No relay state allocated, no credentials needed**, so
+it's safe to spam against shared TURN infrastructure.
+
+#### Local fixture (testserver)
+
+```shell
+$ knockknock turn localhost:18010 -c 3
+DNS lookup: [[::1]:18010, 127.0.0.1:18010]
+localhost:18010: time=   0.42283 ms
+localhost:18010: time=   0.34688 ms
+localhost:18010: time=   0.32504 ms
+```
+
+#### End-to-end against real coturn
+
+Public TURN servers in the wild typically silently drop unauthenticated
+Allocate requests as DoS protection, so finding one on the public
+internet that responds with the spec-mandated 401 is hit-or-miss. To
+prove the wire format end-to-end against the canonical TURN
+implementation, run a local coturn:
+
+```shell
+# macOS
+$ brew install coturn
+
+# Run with long-term credential mechanism enabled — that's what makes
+# coturn return the spec-mandated 401 to unauthenticated Allocate
+# requests, which is exactly what our pinger expects to see.
+$ turnserver -p 3478 --lt-cred-mech --user=test:test --realm=test --no-cli -v &
+
+# Now ping it.
+$ knockknock turn 127.0.0.1:3478 -c 3
+DNS lookup: [127.0.0.1:3478]
+127.0.0.1:3478: time=   0.81679 ms
+127.0.0.1:3478: time=   0.43821 ms
+127.0.0.1:3478: time=   0.42633 ms
+
+$ kill %1
+```
+
+`--lt-cred-mech` enables long-term credential auth (so unauth requests
+get the 401 we want to see). `--realm` sets the realm name that the
+401 must include per RFC 5389 §15.7. `--user` is required by coturn
+even though our pinger never authenticates — the credential is just
+not exercised.
 
 ## MCP server (`knockknock-mcp`)
 

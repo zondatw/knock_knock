@@ -42,6 +42,21 @@ struct Args {
     #[arg(long, default_value_t = 18007)]
     hls: u16,
 
+    /// NTP responder port — replies to any 48-byte client packet with
+    /// a server-mode reply (use 0 for ephemeral)
+    #[arg(long, default_value_t = 18008)]
+    ntp: u16,
+
+    /// STUN responder port — replies to any Binding Request with a
+    /// Binding Success Response (use 0 for ephemeral)
+    #[arg(long, default_value_t = 18009)]
+    stun: u16,
+
+    /// TURN responder port — replies to any Allocate Request with a
+    /// `401 Unauthorized` Allocate Error Response (use 0 for ephemeral)
+    #[arg(long, default_value_t = 18010)]
+    turn: u16,
+
     /// Bind address (default 0.0.0.0; use 127.0.0.1 for loopback only)
     #[arg(long, default_value = "0.0.0.0")]
     bind: String,
@@ -88,6 +103,15 @@ fn main() {
     let hls = start_or_die("hls", args.hls, || {
         testserver::start_hls_ok(format!("{bind}:{}", args.hls))
     });
+    let ntp = start_or_die("ntp", args.ntp, || {
+        testserver::start_ntp_ok(format!("{bind}:{}", args.ntp))
+    });
+    let stun = start_or_die("stun", args.stun, || {
+        testserver::start_stun_ok(format!("{bind}:{}", args.stun))
+    });
+    let turn = start_or_die("turn", args.turn, || {
+        testserver::start_turn_ok(format!("{bind}:{}", args.turn))
+    });
 
     println!("[tcp]  listening on {tcp}");
     println!("[udp]  listening on {udp}");
@@ -97,6 +121,9 @@ fn main() {
     println!("[mqtt] listening on {mqtt}");
     println!("[grpc] listening on {grpc}");
     println!("[hls]  listening on {hls}");
+    println!("[ntp]  listening on {ntp}");
+    println!("[stun] listening on {stun}");
+    println!("[turn] listening on {turn}");
     println!();
     println!("Try in another terminal:");
     println!("  knockknock tcp localhost:{}", tcp.port());
@@ -111,6 +138,9 @@ fn main() {
         hls.port()
     );
     println!("  knockknock grpc grpc://localhost:{} --watch", grpc.port());
+    println!("  knockknock ntp localhost:{}", ntp.port());
+    println!("  knockknock stun localhost:{}", stun.port());
+    println!("  knockknock turn localhost:{}", turn.port());
     println!();
     println!("Press Ctrl+C to stop.");
 

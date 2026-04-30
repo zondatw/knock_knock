@@ -37,7 +37,7 @@ no system trust store dependency.
 
 ```toml
 [dependencies]
-zpinger = "0.6"
+zpinger = "0.7"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -54,12 +54,12 @@ opt out of the default and pick what you need:
 
 ```toml
 # TCP / UDP / DNS only — no TLS, no HTTP stack, no tonic.
-zpinger = { version = "0.6", default-features = false, features = ["tcp", "udp", "dns"] }
+zpinger = { version = "0.7", default-features = false, features = ["tcp", "udp", "dns"] }
 ```
 
 ```toml
 # HTTPS but no gRPC.
-zpinger = { version = "0.6", default-features = false, features = ["http"] }
+zpinger = { version = "0.7", default-features = false, features = ["http"] }
 ```
 
 | Feature | Pinger struct(s) exposed             | What pulls in                          |

@@ -117,6 +117,8 @@ $ cargo run -p testserver
 [ntp]  listening on 0.0.0.0:18008
 [stun] listening on 0.0.0.0:18009
 [turn] listening on 0.0.0.0:18010
+[rtsp] listening on 0.0.0.0:18011
+[rtmp] listening on 0.0.0.0:18012
 
 Try in another terminal:
   knockknock tcp localhost:18000
@@ -131,13 +133,15 @@ Try in another terminal:
   knockknock ntp localhost:18008
   knockknock stun localhost:18009
   knockknock turn localhost:18010
+  knockknock rtsp rtsp://localhost:18011
+  knockknock rtmp rtmp://localhost:18012
 ```
 
 If the default ports are taken, override them (use `0` for an OS-picked
 ephemeral port, or pass any specific number):
 
 ```shell
-$ cargo run -p testserver -- --tcp 0 --udp 0 --http 0 --ws 0 --dns 0 --mqtt 0 --grpc 0 --hls 0 --ntp 0 --stun 0 --turn 0 --bind 127.0.0.1
+$ cargo run -p testserver -- --tcp 0 --udp 0 --http 0 --ws 0 --dns 0 --mqtt 0 --grpc 0 --hls 0 --ntp 0 --stun 0 --turn 0 --rtsp 0 --rtmp 0 --bind 127.0.0.1
 ```
 
 `testserver` doesn't expose a TLS handshake fixture (the `tls` pinger
@@ -183,6 +187,13 @@ Commands:
         (RFC 5766) and treats the expected `401 Unauthorized` reply
         as a successful liveness check. No relay state allocated,
         no credentials needed. Default port 3478.
+  rtsp  RTSP ping — sends an OPTIONS request (RFC 2326 §10.1) and
+        validates the RTSP/1.0 200 response. rtsp:// (TCP/554) and
+        rtsps:// (TLS/322) both accepted.
+  rtmp  RTMP ping — runs the simple Adobe RTMP §5.2.1 handshake
+        (C0+C1 → S0+S1+S2 → C2). rtmp:// (TCP/1935) and rtmps://
+        (TLS/443) both accepted. Useful for live-streaming ingest
+        monitoring.
 
 Options:
   -c, --count <COUNT>  ping times [default: 3]
@@ -628,6 +639,77 @@ get the 401 we want to see). `--realm` sets the realm name that the
 401 must include per RFC 5389 §15.7. `--user` is required by coturn
 even though our pinger never authenticates — the credential is just
 not exercised.
+
+### RTSP
+
+RTSP's `OPTIONS` method is the spec-mandated keepalive (RFC 2326
+§10.1) — every conformant server must accept it and answer with the
+list of supported methods, no media-session state required. We send
+`OPTIONS rtsp://host:port/ RTSP/1.0` and expect `RTSP/1.0 200`.
+
+Schemes: `rtsp://` (TCP/554) and `rtsps://` (TLS/322 per RFC 7826
+§19) both work; the TLS variant reuses the same rustls + webpki-roots
+stack as `https`.
+
+#### Local fixture (testserver)
+
+```shell
+$ knockknock rtsp rtsp://localhost:18011 -c 3
+DNS lookup: [[::1]:18011, 127.0.0.1:18011]
+rtsp://localhost:18011: time=   0.71450 ms
+rtsp://localhost:18011: time=   0.43808 ms
+rtsp://localhost:18011: time=   0.40213 ms
+----- statistic -----
+total time: 1.554710ms
+Connect time: 3, recv time: 3 (100%), lose time: 0 (0%)
+```
+
+#### Real RTSP camera or VoD server
+
+```shell
+$ knockknock rtsp rtsp://camera.example.com:554/stream1 -c 3
+$ knockknock rtsp rtsps://secure-camera.example.com -c 3
+```
+
+### RTMP
+
+Runs the simple Adobe RTMP §5.2.1 handshake (`C0 + C1` →
+`S0 + S1 + S2` → `C2`) and reports the time to handshake completion.
+Doesn't continue into AMF `connect` negotiation — for liveness, the
+handshake closure IS the success signal: it proves the peer speaks
+RTMP version 3 and got past TCP / TLS plumbing.
+
+Schemes: `rtmp://` (TCP/1935) and `rtmps://` (TLS/443).
+
+#### Local fixture (testserver)
+
+```shell
+$ knockknock rtmp rtmp://localhost:18012 -c 3
+DNS lookup: [[::1]:18012, 127.0.0.1:18012]
+rtmp://localhost:18012: time=   1.02350 ms
+rtmp://localhost:18012: time=   0.55408 ms
+rtmp://localhost:18012: time=   0.51125 ms
+```
+
+#### Real ingest endpoints
+
+```shell
+# Live-streaming ingest (Twitch / YouTube / nginx-rtmp / etc.)
+$ knockknock rtmp rtmp://ingest.example.com:1935/live -c 3
+
+# TLS-wrapped variant
+$ knockknock rtmp rtmps://secure-ingest.example.com/live -c 3
+```
+
+You can also run [nginx-rtmp](https://github.com/arut/nginx-rtmp-module)
+locally for end-to-end validation against a real-world RTMP
+implementation:
+
+```shell
+# macOS: brew install nginx (with rtmp module) or via docker
+$ docker run --rm -p 1935:1935 tiangolo/nginx-rtmp &
+$ knockknock rtmp rtmp://127.0.0.1:1935 -c 3
+```
 
 ## MCP server (`knockknock-mcp`)
 

@@ -84,6 +84,16 @@ mod turn;
 #[cfg(feature = "turn")]
 pub use crate::turn::TurnPinger;
 
+#[cfg(feature = "rtsp")]
+mod rtsp;
+#[cfg(feature = "rtsp")]
+pub use crate::rtsp::RtspPinger;
+
+#[cfg(feature = "rtmp")]
+mod rtmp;
+#[cfg(feature = "rtmp")]
+pub use crate::rtmp::RtmpPinger;
+
 // `BUF_SIZE` is shared by `level4` (tcp / udp) and `http`.
 // `HTTP_UNCONNECT_STATUS_CODE` is http-only.
 #[cfg(any(feature = "tcp", feature = "udp", feature = "http"))]

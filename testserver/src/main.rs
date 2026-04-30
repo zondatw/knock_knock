@@ -57,6 +57,16 @@ struct Args {
     #[arg(long, default_value_t = 18010)]
     turn: u16,
 
+    /// RTSP responder port — replies to OPTIONS with
+    /// `RTSP/1.0 200 OK` (use 0 for ephemeral)
+    #[arg(long, default_value_t = 18011)]
+    rtsp: u16,
+
+    /// RTMP handshake responder port — completes the simple Adobe
+    /// RTMP §5.2.1 handshake (use 0 for ephemeral)
+    #[arg(long, default_value_t = 18012)]
+    rtmp: u16,
+
     /// Bind address (default 0.0.0.0; use 127.0.0.1 for loopback only)
     #[arg(long, default_value = "0.0.0.0")]
     bind: String,
@@ -112,6 +122,12 @@ fn main() {
     let turn = start_or_die("turn", args.turn, || {
         testserver::start_turn_ok(format!("{bind}:{}", args.turn))
     });
+    let rtsp = start_or_die("rtsp", args.rtsp, || {
+        testserver::start_rtsp_ok(format!("{bind}:{}", args.rtsp))
+    });
+    let rtmp = start_or_die("rtmp", args.rtmp, || {
+        testserver::start_rtmp_ok(format!("{bind}:{}", args.rtmp))
+    });
 
     println!("[tcp]  listening on {tcp}");
     println!("[udp]  listening on {udp}");
@@ -124,6 +140,8 @@ fn main() {
     println!("[ntp]  listening on {ntp}");
     println!("[stun] listening on {stun}");
     println!("[turn] listening on {turn}");
+    println!("[rtsp] listening on {rtsp}");
+    println!("[rtmp] listening on {rtmp}");
     println!();
     println!("Try in another terminal:");
     println!("  knockknock tcp localhost:{}", tcp.port());
@@ -141,6 +159,8 @@ fn main() {
     println!("  knockknock ntp localhost:{}", ntp.port());
     println!("  knockknock stun localhost:{}", stun.port());
     println!("  knockknock turn localhost:{}", turn.port());
+    println!("  knockknock rtsp rtsp://localhost:{}", rtsp.port());
+    println!("  knockknock rtmp rtmp://localhost:{}", rtmp.port());
     println!();
     println!("Press Ctrl+C to stop.");
 

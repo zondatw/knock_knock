@@ -634,3 +634,90 @@ pub fn start_turn_ok<A: ToSocketAddrs>(addr: A) -> Result<SocketAddr> {
     });
     Ok(bound)
 }
+
+/// Spin up a minimal RTSP server on `addr`. Replies to any incoming
+/// request line that starts with `OPTIONS ` with `RTSP/1.0 200 OK` +
+/// `CSeq: 1` + a `Public` header, which is what `RtspPinger`
+/// validates. Reads until the request's `\r\n\r\n` end-of-headers
+/// before responding so the client's `OPTIONS` arrives intact even on
+/// fragmented sends.
+pub fn start_rtsp_ok<A: ToSocketAddrs>(addr: A) -> Result<SocketAddr> {
+    let listener = TcpListener::bind(addr)?;
+    let bound = listener.local_addr()?;
+    thread::spawn(move || {
+        for stream in listener.incoming().flatten() {
+            thread::spawn(move || {
+                let mut s = stream;
+                let mut buf = [0u8; BUF_SIZE];
+                let mut total = 0usize;
+                loop {
+                    let n = match s.read(&mut buf[total..]) {
+                        Ok(0) | Err(_) => return,
+                        Ok(n) => n,
+                    };
+                    total += n;
+                    if buf[..total].windows(4).any(|w| w == b"\r\n\r\n") {
+                        break;
+                    }
+                    if total >= buf.len() {
+                        return;
+                    }
+                }
+                if !buf.starts_with(b"OPTIONS ") {
+                    return;
+                }
+                let _ = s.write_all(
+                    b"RTSP/1.0 200 OK\r\n\
+                      CSeq: 1\r\n\
+                      Public: OPTIONS, DESCRIBE, SETUP, PLAY, TEARDOWN\r\n\
+                      \r\n",
+                );
+            });
+        }
+    });
+    Ok(bound)
+}
+
+/// Spin up a minimal RTMP server on `addr` that completes the simple
+/// Adobe RTMP §5.2.1 handshake with any connecting client: read C0+C1,
+/// send S0+S1+S2 (S2 echoing C1, S1 a constant blob), read C2 and
+/// drop. That's the exact wire shape `RtmpPinger` exercises, and after
+/// C2 the connection closes — fine for ping-only liveness, not enough
+/// to actually negotiate a publish/play session.
+pub fn start_rtmp_ok<A: ToSocketAddrs>(addr: A) -> Result<SocketAddr> {
+    const RTMP_VERSION: u8 = 3;
+    const PAYLOAD_LEN: usize = 1536;
+    let listener = TcpListener::bind(addr)?;
+    let bound = listener.local_addr()?;
+    thread::spawn(move || {
+        for stream in listener.incoming().flatten() {
+            thread::spawn(move || {
+                let mut s = stream;
+                // Read C0 (1 byte).
+                let mut c0 = [0u8; 1];
+                if s.read_exact(&mut c0).is_err() || c0[0] != RTMP_VERSION {
+                    return;
+                }
+                // Read C1 (1536 bytes) — we'll echo this back as S2.
+                let mut c1 = [0u8; PAYLOAD_LEN];
+                if s.read_exact(&mut c1).is_err() {
+                    return;
+                }
+                // Send S0 + S1 + S2.
+                let s1 = [0xCDu8; PAYLOAD_LEN];
+                let mut out = Vec::with_capacity(1 + PAYLOAD_LEN * 2);
+                out.push(RTMP_VERSION);
+                out.extend_from_slice(&s1);
+                out.extend_from_slice(&c1);
+                if s.write_all(&out).is_err() {
+                    return;
+                }
+                // Read C2 (must equal S1 if the client follows the spec).
+                let mut c2 = [0u8; PAYLOAD_LEN];
+                let _ = s.read_exact(&mut c2);
+                // Done — client closes.
+            });
+        }
+    });
+    Ok(bound)
+}

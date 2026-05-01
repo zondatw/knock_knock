@@ -844,9 +844,38 @@ Add to `claude_desktop_config.json`:
 }
 ```
 
-Then ask the agent things like "Is `https://api.example.com/health`
-reachable?" or "What's the gRPC RTT to my staging service?" and it
-will call the right tool.
+### Wiring into OpenAI Codex
+
+Codex (the
+[OpenAI coding agent](https://github.com/openai/codex)) reads MCP
+server configuration from `~/.codex/config.toml` (TOML, not JSON).
+Add a `[mcp_servers.<name>]` section:
+
+```toml
+[mcp_servers.knockknock]
+command = "knockknock-mcp"
+```
+
+Codex resolves `command` via `PATH`, so as long as
+`cargo install knockknock --features mcp` put the binary somewhere
+on your shell's `PATH`, no absolute path is needed. Restart Codex
+after editing the file — config is read once at startup.
+
+You can also use the built-in CLI instead of hand-editing:
+
+```shell
+codex mcp add knockknock --command knockknock-mcp
+```
+
+Project-scoped wiring works the same way — drop a `.codex/config.toml`
+at the repo root with the same `[mcp_servers.knockknock]` section
+when you want the integration scoped to one repo.
+
+### Trying it out
+
+Once wired into either client, ask the agent things like "Is
+`https://api.example.com/health` reachable?" or "What's the gRPC RTT
+to my staging service?" and it will call the right tool.
 
 ## Skill for AI agents
 

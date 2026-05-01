@@ -844,9 +844,72 @@ Add to `claude_desktop_config.json`:
 }
 ```
 
-Then ask the agent things like "Is `https://api.example.com/health`
-reachable?" or "What's the gRPC RTT to my staging service?" and it
-will call the right tool.
+### Wiring into OpenAI Codex
+
+Codex (the
+[OpenAI coding agent](https://github.com/openai/codex)) reads MCP
+server configuration from `~/.codex/config.toml` (TOML, not JSON).
+Add a `[mcp_servers.<name>]` section:
+
+```toml
+[mcp_servers.knockknock]
+command = "knockknock-mcp"
+```
+
+Codex resolves `command` via `PATH`, so as long as
+`cargo install knockknock --features mcp` put the binary somewhere
+on your shell's `PATH`, no absolute path is needed. Restart Codex
+after editing the file — config is read once at startup.
+
+You can also use the built-in CLI instead of hand-editing:
+
+```shell
+codex mcp add knockknock --command knockknock-mcp
+```
+
+Project-scoped wiring works the same way — drop a `.codex/config.toml`
+at the repo root with the same `[mcp_servers.knockknock]` section
+when you want the integration scoped to one repo.
+
+### Trying it out
+
+Once wired into either client, ask the agent things like "Is
+`https://api.example.com/health` reachable?" or "What's the gRPC RTT
+to my staging service?" and it will call the right tool.
+
+## Skill for AI agents
+
+The repo ships a Claude Code skill at `skills/knockknock/` that
+teaches **other** Claude agents (e.g., Claude Code, Claude Desktop)
+when to invoke knockknock and how to read its output. It's the
+"prompt-side" companion to the MCP server — MCP gives the agent the
+tools, the skill teaches it which tool to pick and how to interpret
+the result.
+
+Install the skill into Claude's user-global skills directory:
+
+```shell
+# clone into a stable location, then symlink — keeps the skill in
+# sync if the repo updates
+git clone https://github.com/zondatw/knock_knock ~/src/knock_knock
+ln -s ~/src/knock_knock/skills/knockknock ~/.claude/skills/knockknock
+```
+
+Or copy just the markdown if you don't want a clone:
+
+```shell
+mkdir -p ~/.claude/skills/knockknock
+curl -L https://raw.githubusercontent.com/zondatw/knock_knock/main/skills/knockknock/SKILL.md \
+  -o ~/.claude/skills/knockknock/SKILL.md
+curl -L https://raw.githubusercontent.com/zondatw/knock_knock/main/skills/knockknock/recipes.md \
+  -o ~/.claude/skills/knockknock/recipes.md
+```
+
+After installation the agent automatically discovers the skill via
+its `description` field; no config edit needed. The skill then
+detects whether `knockknock-mcp` / `knockknock` are on PATH and falls
+back to surfacing the `cargo install knockknock --features mcp`
+command if they aren't.
 
 ## Library usage (`zpinger`)
 
